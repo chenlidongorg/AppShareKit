@@ -3,6 +3,8 @@ import UIKit
 
 /// Public entry for performing promotion shares.
 public enum AppShareKit {
+    private static let shareImageCache = ShareImageCache.shared
+
     /// Generates a promotion image and either shares it immediately or returns a ready-to-use SwiftUI button.
     /// - Note: Passing any of the share button parameters will return a button view. Otherwise the share sheet appears immediately.
     @MainActor
@@ -46,9 +48,8 @@ public enum AppShareKit {
     }
 
     @MainActor
-    static func shareImmediately(payload: AppSharePayload, presenter: UIViewController?) {
-        let composer = ShareImageComposer()
-        let image = composer.composeImage(from: payload)
+    static func shareImmediately(payload: AppSharePayload, presenter: UIViewController?, preparedImage: UIImage? = nil) {
+        let image = preparedImage ?? shareImageCache.preparedImage(for: payload)
         let activityItems: [Any] = [image]
         let shareController = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
         shareController.excludedActivityTypes = [.assignToContact]

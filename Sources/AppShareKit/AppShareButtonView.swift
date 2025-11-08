@@ -5,6 +5,9 @@ struct AppShareButtonView: View {
     let payload: AppSharePayload
     let appearance: ShareButtonAppearance
     private let presenterReference: WeakPresenterReference
+    private let imageCache = ShareImageCache.shared
+    @State private var warmedImage: UIImage?
+    @State private var warmedPayloadID: String?
 
     init(payload: AppSharePayload, appearance: ShareButtonAppearance, presenter: UIViewController?) {
         self.payload = payload
@@ -28,6 +31,7 @@ struct AppShareButtonView: View {
             )
         }
         .buttonStyle(.plain)
+        .onAppear(perform: warmUpShareImage)
     }
 
     @ViewBuilder
@@ -45,7 +49,29 @@ struct AppShareButtonView: View {
 
     private func share() {
         Task { @MainActor in
-            AppShareKit.shareImmediately(payload: payload, presenter: presenterReference.controller)
+            let image = warmedImage ?? imageCache.preparedImage(for: payload)
+            warmedImage = image
+            AppShareKit.shareImmediately(
+                payload: payload,
+                presenter: presenterReference.controller,
+                preparedImage: image
+            )
+        }
+    }
+
+    private func warmUpShareImage() {
+        let identifier = payload.cacheIdentifier
+        guard warmedPayloadID != identifier || warmedImage == nil else { return }
+        warmedPayloadID = identifier
+
+        if let cached = imageCache.cachedImageIfAvailable(for: payload) {
+            warmedImage = cached
+            return
+        }
+
+        imageCache.prepareImage(for: payload) { image in
+            guard warmedPayloadID == identifier else { return }
+            warmedImage = image
         }
     }
 }

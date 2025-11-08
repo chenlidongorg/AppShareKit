@@ -45,7 +45,7 @@ final class ShareImageComposer {
             width: Layout.canvasSize.width - Layout.cardInset * 2,
             height: Layout.canvasSize.height - Layout.cardInset * 3
         )
-        context.saveGState()
+        context.saveGState() // isolate the clip so later drawing isn't limited to this image
         let path = UIBezierPath(roundedRect: cardRect, cornerRadius: 48)
         context.setShadow(offset: CGSize(width: 0, height: 24), blur: 48, color: UIColor.black.withAlphaComponent(0.08).cgColor)
         UIColor.white.setFill()
@@ -162,10 +162,16 @@ final class ShareImageComposer {
     }
 
     private func draw(image: UIImage, in rect: CGRect, cornerRadius: CGFloat) {
+        guard let context = UIGraphicsGetCurrentContext() else {
+            image.draw(in: rect)
+            return
+        }
+        context.saveGState() // limit clipping to this draw call so the rest of the canvas is unaffected
         let path = UIBezierPath(roundedRect: rect, cornerRadius: cornerRadius)
         path.addClip()
         let fittedRect = aspectFitRect(for: image.size, inside: rect)
         image.draw(in: fittedRect)
+        context.restoreGState()
     }
 
     private func aspectFitRect(for size: CGSize, inside rect: CGRect) -> CGRect {

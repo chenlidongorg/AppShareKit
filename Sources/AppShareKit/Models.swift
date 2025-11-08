@@ -1,3 +1,4 @@
+import CryptoKit
 import UIKit
 
 struct AppSharePayload {
@@ -17,6 +18,17 @@ struct AppSharePayload {
 
     var sanitizedURL: String {
         officeURL?.trimmedNonEmpty ?? "Scan the QR code to install."
+    }
+
+    var cacheIdentifier: String {
+        let components = [
+            sanitizedAppName,
+            sanitizedPrompt,
+            sanitizedURL,
+            logo?.pngData()?.sha256Hex ?? "no-logo",
+            qrcode?.pngData()?.sha256Hex ?? "no-qr"
+        ]
+        return components.joined(separator: "|").sha256Hex
     }
 }
 
@@ -41,5 +53,18 @@ extension String {
             return nil
         }
         return value
+    }
+
+    fileprivate var sha256Hex: String {
+        Data(utf8).sha256Hex
+    }
+}
+
+private extension Data {
+    var sha256Hex: String {
+        let digest = SHA256.hash(data: self)
+        return digest.reduce(into: "") { partialResult, byte in
+            partialResult += String(format: "%02x", byte)
+        }
     }
 }
