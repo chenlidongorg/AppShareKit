@@ -2,11 +2,62 @@ import UIKit
 
 final class ShareImageComposer {
     private struct Layout {
-        static let canvasSize = CGSize(width: 1024, height: 1400)
+        static let canvasWidth: CGFloat = 1024
         static let cardInset: CGFloat = 64
         static let contentInset: CGFloat = 48
         static let logoSize: CGFloat = 180
         static let qrSize: CGFloat = 260
+        static let columnSpacing: CGFloat = 32
+        static let headerTextSpacing: CGFloat = 12
+        static let headerSeparatorSpacing: CGFloat = 40
+        static let sectionSpacing: CGFloat = 32
+        static let hintSpacing: CGFloat = 24
+        static let separatorHeight: CGFloat = 1
+    }
+
+    private struct ResolvedLayout {
+        let canvasSize: CGSize
+        let cardRect: CGRect
+        let contentRect: CGRect
+    }
+
+    private enum Typography {
+        static let nameFont = UIFont.systemFont(ofSize: 56, weight: .heavy)
+        static let promptFont = UIFont.systemFont(ofSize: 32, weight: .regular)
+        static let urlFont = UIFont.monospacedSystemFont(ofSize: 30, weight: .regular)
+        static let hintFont = UIFont.systemFont(ofSize: 24, weight: .regular)
+
+        static var nameAttributes: [NSAttributedString.Key: Any] {
+            [
+                .font: nameFont,
+                .foregroundColor: UIColor(red: 0.08, green: 0.10, blue: 0.16, alpha: 1)
+            ]
+        }
+
+        static var promptAttributes: [NSAttributedString.Key: Any] {
+            [
+                .font: promptFont,
+                .foregroundColor: UIColor(red: 0.23, green: 0.27, blue: 0.36, alpha: 1)
+            ]
+        }
+
+        static var urlAttributes: [NSAttributedString.Key: Any] {
+            [
+                .font: urlFont,
+                .foregroundColor: UIColor(red: 0.15, green: 0.17, blue: 0.26, alpha: 1)
+            ]
+        }
+
+        static var hintAttributes: [NSAttributedString.Key: Any] {
+            [
+                .font: hintFont,
+                .foregroundColor: UIColor(red: 0.40, green: 0.44, blue: 0.56, alpha: 1)
+            ]
+        }
+    }
+
+    private enum Copy {
+        static let qrHint = "Tip: Add a QR code to increase installs"
     }
 
     func composeImage(from payload: AppSharePayload, scale: CGFloat = UIScreen.main.scale) -> UIImage {
@@ -15,11 +66,85 @@ final class ShareImageComposer {
         format.scale = resolvedScale
         format.opaque = false
 
-        let renderer = UIGraphicsImageRenderer(size: Layout.canvasSize, format: format)
+        let resolvedLogo = payload.logo ?? placeholderLogo(for: payload)
+        let layout = resolveLayout(for: payload, logo: resolvedLogo)
+        let renderer = UIGraphicsImageRenderer(size: layout.canvasSize, format: format)
         return renderer.image { context in
-            drawBackground(in: context.cgContext, size: Layout.canvasSize)
-            drawCard(in: context.cgContext, payload: payload)
+            drawBackground(in: context.cgContext, size: layout.canvasSize)
+            drawCard(in: context.cgContext, payload: payload, layout: layout, logo: resolvedLogo)
         }
+    }
+
+    private func resolveLayout(for payload: AppSharePayload, logo: UIImage?) -> ResolvedLayout {
+        let cardWidth = Layout.canvasWidth - Layout.cardInset * 2
+        let contentWidth = max(cardWidth - Layout.contentInset * 2, 0)
+        let headerHeight = measureHeaderHeight(for: payload, contentWidth: contentWidth, logo: logo)
+        let footerHeight = measureFooterHeight(for: payload, contentWidth: contentWidth)
+        let contentHeight = headerHeight + Layout.sectionSpacing + footerHeight
+        let cardHeight = Layout.contentInset * 2 + contentHeight
+        let canvasHeight = cardHeight + Layout.cardInset * 3
+        let canvasSize = CGSize(width: Layout.canvasWidth, height: canvasHeight)
+        let cardRect = CGRect(
+            x: Layout.cardInset,
+            y: Layout.cardInset * 1.5,
+            width: cardWidth,
+            height: cardHeight
+        )
+        let contentRect = cardRect.insetBy(dx: Layout.contentInset, dy: Layout.contentInset)
+        return ResolvedLayout(canvasSize: canvasSize, cardRect: cardRect, contentRect: contentRect)
+    }
+
+    private func measureHeaderHeight(for payload: AppSharePayload, contentWidth: CGFloat, logo: UIImage?) -> CGFloat {
+        guard contentWidth > 0 else { return Layout.logoSize + Layout.headerSeparatorSpacing + Layout.separatorHeight }
+        let hasLogo = logo != nil
+        let textStartX = hasLogo ? Layout.logoSize + Layout.columnSpacing : 0
+        let textWidth = max(contentWidth - textStartX, 0)
+        let nameString = payload.sanitizedAppName as NSString
+        let nameHeight = ceil(nameString.size(withAttributes: Typography.nameAttributes).height)
+        let promptHeight = boundingHeight(
+            for: payload.sanitizedPrompt,
+            width: textWidth,
+            attributes: Typography.promptAttributes
+        )
+        let textBlockHeight = nameHeight + (promptHeight > 0 ? Layout.headerTextSpacing + promptHeight : 0)
+        let logoHeight = hasLogo ? Layout.logoSize : 0
+        let headerContentHeight = max(textBlockHeight, logoHeight)
+        return headerContentHeight + Layout.headerSeparatorSpacing + Layout.separatorHeight
+    }
+
+    private func measureFooterHeight(for payload: AppSharePayload, contentWidth: CGFloat) -> CGFloat {
+        guard contentWidth > 0 else { return Layout.qrSize }
+        let hasQRCode = payload.qrcode != nil
+        let textWidth = hasQRCode ? max(contentWidth - Layout.qrSize - Layout.columnSpacing, 0) : contentWidth
+        let urlHeight = boundingHeight(
+            for: payload.sanitizedURL,
+            width: textWidth,
+            attributes: Typography.urlAttributes
+        )
+        var textBlockHeight = urlHeight
+        if !hasQRCode {
+            let hintHeight = boundingHeight(
+                for: Copy.qrHint,
+                width: textWidth,
+                attributes: Typography.hintAttributes
+            )
+            if hintHeight > 0 {
+                textBlockHeight += Layout.hintSpacing + hintHeight
+            }
+        }
+        let qrBlockHeight = hasQRCode ? Layout.qrSize : 0
+        return max(textBlockHeight, qrBlockHeight)
+    }
+
+    private func boundingHeight(for string: String, width: CGFloat, attributes: [NSAttributedString.Key: Any]) -> CGFloat {
+        guard !string.isEmpty, width > 0 else { return 0 }
+        let rect = (string as NSString).boundingRect(
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: attributes,
+            context: nil
+        )
+        return ceil(rect.height)
     }
 
     private func drawBackground(in context: CGContext, size: CGSize) {
@@ -38,13 +163,8 @@ final class ShareImageComposer {
         context.drawLinearGradient(gradient, start: start, end: end, options: [])
     }
 
-    private func drawCard(in context: CGContext, payload: AppSharePayload) {
-        let cardRect = CGRect(
-            x: Layout.cardInset,
-            y: Layout.cardInset * 1.5,
-            width: Layout.canvasSize.width - Layout.cardInset * 2,
-            height: Layout.canvasSize.height - Layout.cardInset * 3
-        )
+    private func drawCard(in context: CGContext, payload: AppSharePayload, layout: ResolvedLayout, logo: UIImage?) {
+        let cardRect = layout.cardRect
         context.saveGState() // isolate the clip so later drawing isn't limited to this image
         let path = UIBezierPath(roundedRect: cardRect, cornerRadius: 48)
         context.setShadow(offset: CGSize(width: 0, height: 24), blur: 48, color: UIColor.black.withAlphaComponent(0.08).cgColor)
@@ -52,113 +172,110 @@ final class ShareImageComposer {
         path.fill()
         context.restoreGState()
 
-        let contentRect = cardRect.insetBy(dx: Layout.contentInset, dy: Layout.contentInset)
-        let footerStart = drawHeader(in: context, payload: payload, rect: contentRect)
-        drawFooter(in: context, payload: payload, rect: contentRect, startY: footerStart + 32)
+        let contentRect = layout.contentRect
+        let footerStart = drawHeader(in: context, payload: payload, rect: contentRect, logo: logo)
+        drawFooter(in: context, payload: payload, rect: contentRect, startY: footerStart + Layout.sectionSpacing)
     }
 
     @discardableResult
-    private func drawHeader(in context: CGContext, payload: AppSharePayload, rect: CGRect) -> CGFloat {
+    private func drawHeader(in context: CGContext, payload: AppSharePayload, rect: CGRect, logo: UIImage?) -> CGFloat {
         let currentY = rect.minY
-        let logoRect = CGRect(x: rect.minX, y: currentY, width: Layout.logoSize, height: Layout.logoSize)
-        var hasLogo = false
+        var textStartX = rect.minX
+        var logoBottomY = currentY
 
-        if let logo = payload.logo ?? placeholderLogo(for: payload) {
+        if let logo = logo {
+            let logoRect = CGRect(x: rect.minX, y: currentY, width: Layout.logoSize, height: Layout.logoSize)
             draw(image: logo, in: logoRect, cornerRadius: 40)
-            hasLogo = true
+            textStartX = logoRect.maxX + Layout.columnSpacing
+            logoBottomY = logoRect.maxY
         }
 
-        let textStartX = hasLogo ? logoRect.maxX + 32 : rect.minX
-        let textWidth = rect.maxX - textStartX
-
-        let nameAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 56, weight: .heavy),
-            .foregroundColor: UIColor(red: 0.08, green: 0.10, blue: 0.16, alpha: 1)
-        ]
-        let promptAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 32, weight: .regular),
-            .foregroundColor: UIColor(red: 0.23, green: 0.27, blue: 0.36, alpha: 1)
-        ]
-
+        let textWidth = max(rect.maxX - textStartX, 0)
         let nameString = payload.sanitizedAppName as NSString
-        let nameRect = CGRect(x: textStartX, y: currentY, width: textWidth, height: 70)
-        nameString.draw(in: nameRect, withAttributes: nameAttributes)
+        let nameSize = nameString.size(withAttributes: Typography.nameAttributes)
+        let nameHeight = ceil(nameSize.height)
+        let nameRect = CGRect(x: textStartX, y: currentY, width: textWidth, height: nameHeight)
+        nameString.draw(in: nameRect, withAttributes: Typography.nameAttributes)
 
         let promptString = payload.sanitizedPrompt as NSString
-        let promptRect = CGRect(x: textStartX, y: nameRect.maxY + 12, width: textWidth, height: 160)
-        promptString.draw(with: promptRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: promptAttributes, context: nil)
+        let promptHeight = boundingHeight(
+            for: payload.sanitizedPrompt,
+            width: textWidth,
+            attributes: Typography.promptAttributes
+        )
+        var textBottomY = nameRect.maxY
+        if promptHeight > 0 {
+            let promptRect = CGRect(
+                x: textStartX,
+                y: nameRect.maxY + Layout.headerTextSpacing,
+                width: textWidth,
+                height: promptHeight
+            )
+            promptString.draw(
+                with: promptRect,
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: Typography.promptAttributes,
+                context: nil
+            )
+            textBottomY = promptRect.maxY
+        }
 
-        let bottomY = max(hasLogo ? logoRect.maxY : rect.minY, promptRect.maxY)
-        let separatorY = bottomY + 40
-        let separatorRect = CGRect(x: rect.minX, y: separatorY, width: rect.width, height: 1)
+        let contentBottom = max(logoBottomY, textBottomY)
+        let separatorY = contentBottom + Layout.headerSeparatorSpacing
+        let separatorRect = CGRect(x: rect.minX, y: separatorY, width: rect.width, height: Layout.separatorHeight)
         UIColor(white: 0.92, alpha: 1).setFill()
         UIBezierPath(rect: separatorRect).fill()
         return separatorRect.maxY
     }
 
     private func drawFooter(in context: CGContext, payload: AppSharePayload, rect: CGRect, startY: CGFloat) {
-        let footerTop = min(max(startY, rect.minY), rect.maxY - Layout.qrSize - 40)
-        let availableHeight = rect.maxY - footerTop
-        let qrRect = CGRect(x: rect.maxX - Layout.qrSize, y: footerTop, width: Layout.qrSize, height: Layout.qrSize)
+        let footerTop = max(startY, rect.minY)
         let hasQRCode = payload.qrcode != nil
+        let qrRect = CGRect(x: rect.maxX - Layout.qrSize, y: footerTop, width: Layout.qrSize, height: Layout.qrSize)
         if let qr = payload.qrcode {
             draw(image: qr, in: qrRect, cornerRadius: 24)
-            drawQRCodeCaption(in: context, rect: qrRect)
         }
 
-        let textWidth = hasQRCode ? qrRect.minX - rect.minX - 32 : rect.width
-        let textRect = CGRect(x: rect.minX, y: footerTop, width: textWidth, height: availableHeight)
-
-        let caption = "Official Link" as NSString
-        let captionAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 24, weight: .medium),
-            .foregroundColor: UIColor(red: 0.19, green: 0.24, blue: 0.36, alpha: 1)
-        ]
-        let captionSize = caption.size(withAttributes: captionAttributes)
-        caption.draw(in: CGRect(x: textRect.minX, y: textRect.minY, width: captionSize.width, height: captionSize.height), withAttributes: captionAttributes)
-
-        let urlAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.monospacedSystemFont(ofSize: 30, weight: .regular),
-            .foregroundColor: UIColor(red: 0.15, green: 0.17, blue: 0.26, alpha: 1)
-        ]
-        let urlRect = CGRect(
-            x: textRect.minX,
-            y: textRect.minY + captionSize.height + 12,
-            width: textRect.width,
-            height: 200
+        let textWidth = hasQRCode ? max(qrRect.minX - rect.minX - Layout.columnSpacing, 0) : rect.width
+        var currentY = footerTop
+        let urlHeight = boundingHeight(
+            for: payload.sanitizedURL,
+            width: textWidth,
+            attributes: Typography.urlAttributes
         )
-        (payload.sanitizedURL as NSString).draw(with: urlRect, options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: urlAttributes, context: nil)
+        if urlHeight > 0 {
+            let urlRect = CGRect(x: rect.minX, y: currentY, width: textWidth, height: urlHeight)
+            (payload.sanitizedURL as NSString).draw(
+                with: urlRect,
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: Typography.urlAttributes,
+                context: nil
+            )
+            currentY = urlRect.maxY
+        }
 
         if !hasQRCode {
-            let hintAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 24, weight: .regular),
-                .foregroundColor: UIColor(red: 0.40, green: 0.44, blue: 0.56, alpha: 1)
-            ]
-            let hint = "Tip: Add a QR code to increase installs" as NSString
-            let hintRect = CGRect(
-                x: textRect.minX,
-                y: urlRect.maxY + 24,
-                width: textRect.width,
-                height: 60
+            let hintHeight = boundingHeight(
+                for: Copy.qrHint,
+                width: textWidth,
+                attributes: Typography.hintAttributes
             )
-            hint.draw(with: hintRect, options: [.usesLineFragmentOrigin], attributes: hintAttributes, context: nil)
+            if hintHeight > 0 {
+                let hint = Copy.qrHint as NSString
+                let hintRect = CGRect(
+                    x: rect.minX,
+                    y: currentY + Layout.hintSpacing,
+                    width: textWidth,
+                    height: hintHeight
+                )
+                hint.draw(
+                    with: hintRect,
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    attributes: Typography.hintAttributes,
+                    context: nil
+                )
+            }
         }
-    }
-
-    private func drawQRCodeCaption(in context: CGContext, rect: CGRect) {
-        let label = "Scan to install" as NSString
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 22, weight: .semibold),
-            .foregroundColor: UIColor(red: 0.25, green: 0.30, blue: 0.45, alpha: 1)
-        ]
-        let size = label.size(withAttributes: attributes)
-        let textRect = CGRect(
-            x: rect.midX - size.width / 2,
-            y: rect.maxY + 12,
-            width: size.width,
-            height: size.height
-        )
-        label.draw(in: textRect, withAttributes: attributes)
     }
 
     private func draw(image: UIImage, in rect: CGRect, cornerRadius: CGFloat) {
