@@ -34,9 +34,10 @@ struct ShareButtonAppearance {
     }
 }
 
-extension Optional where Wrapped == String {
+extension String {
     fileprivate var trimmedNonEmpty: String? {
-        guard let value = self?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else {
             return nil
         }
         return value

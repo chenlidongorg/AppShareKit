@@ -59,8 +59,8 @@ final class ShareImageComposer {
 
     @discardableResult
     private func drawHeader(in context: CGContext, payload: AppSharePayload, rect: CGRect) -> CGFloat {
-        var currentY = rect.minY
-        var logoRect = CGRect(x: rect.minX, y: currentY, width: Layout.logoSize, height: Layout.logoSize)
+        let currentY = rect.minY
+        let logoRect = CGRect(x: rect.minX, y: currentY, width: Layout.logoSize, height: Layout.logoSize)
         var hasLogo = false
 
         if let logo = payload.logo ?? placeholderLogo(for: payload) {

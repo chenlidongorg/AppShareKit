@@ -28,7 +28,6 @@ struct AppShareButtonView: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("AppShareKitShareButton")
     }
 
     @ViewBuilder
