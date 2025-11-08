@@ -1,0 +1,23 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+.swiftpm/xcode
+Packages/
+# Xcode
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+*.tmp
+
+# Playground
+timeline.xctimeline
+playground.xcworkspace
+ProductRequirements.md
