@@ -1,9 +1,9 @@
 # AppShareKit
 
-`AppShareKit` 将常见的应用推广分享流程封装成 Swift Package，输入若干可选参数（名称、推广语、Logo、二维码、直达链接和可选的分享按钮样式）即可在 iOS 13 及以上系统生成一张排版良好的分享图片，并通过系统分享面板分发。
+`AppShareKit` 将常见的应用推广分享流程封装成 Swift Package，输入若干可选参数（名称、推广语、Logo、作品图、二维码、直达链接和可选的分享按钮样式）即可在 iOS 13 及以上系统生成一张排版良好的分享图片，并通过系统分享面板分发。
 
-- 💡 **弹性入参**：`appName`、`prompt`、`logo`、`qrcode`、`officeURL` 及分享按钮相关参数全部可选；缺失的元素会自动隐藏，但分享流程仍可执行。
-- 🖼️ **自动构图**：内置 `UIImage` 渲染器，会按“Logo + 文案 + 二维码 + 直达地址”的布局生成推广图，整体风格简洁醒目。
+- 💡 **弹性入参**：`appName`、`prompt`、`logo`、`contentImage`、`qrcode`、`officeURL` 及分享按钮相关参数全部可选；缺失的元素会自动隐藏，但分享流程仍可执行。
+- 🖼️ **自动构图**：内置 `UIImage` 渲染器，会按“Logo + 文案 +（可选）作品插图 + 二维码 + 直达地址”的布局生成推广图，整体风格简洁醒目。
 - 🪄 **一键分享**：当不需要内置按钮时，可直接在任意 `Button` 的 action 中调用 `AppShareKit.appshare(...)` 立刻唤起分享面板。
 - 🔘 **自带分享按钮**：只要提供任意一个 `shareButtonIcon` / `shareButtonImage` / `shareButtonName`，`AppShareKit.appshare(...)` 就会返回一个 SwiftUI 按钮视图，点击后生成并分享推广图。
 - 📲 **iOS 13+**：使用 UIKit + SwiftUI 结合实现，在所有 iOS 13 及以上版本可用。
@@ -18,7 +18,7 @@
 
 2. 在目标的依赖里引用 `AppShareKit` 模块。
 
-## 快速上手
+## AppShareKit 快速上手
 
 ### 外部自定义按钮（无内置分享按钮）
 
@@ -30,11 +30,12 @@ struct ContentView: View {
     var body: some View {
         Button {
             AppShareKit.appshare(
-                appName: "Hello AI",
-                prompt: "AI 创作助手 · 秒出灵感",
-                logo: UIImage(named: "app_logo"),
-                qrcode: UIImage(named: "qr_install"),
-                officeURL: "https://hello.ai/app"
+                appName: "Hello AI", //可选
+                prompt: "AI 创作助手 · 秒出灵感",//可选
+                logo: UIImage(named: "app_logo"),//可选
+                contentImage: UIImage(named: "user_work"),//可选
+                qrcode: UIImage(named: "qr_install"),//可选
+                officeURL: "https://hello.ai/app"//可选
             )
         } label: {
             Image(systemName: "square.and.arrow.up")
@@ -55,6 +56,7 @@ struct ShareSection: View {
             appName: "Hello AI",
             prompt: "AI 创作助手 · 秒出灵感",
             logo: UIImage(named: "app_logo"),
+            contentImage: UIImage(named: "user_work"),
             qrcode: UIImage(named: "qr_install"),
             officeURL: "https://hello.ai/app",
             shareButtonIcon: "sparkles",
@@ -71,8 +73,9 @@ struct ShareSection: View {
 
 1. 使用白色背景与浅灰投影的卡片布局，整体长方形比例，兼容主流社交平台裁剪。
 2. 上部为 Logo + App 名称 + 推广语，缺失的元素会让剩余内容自动居左。
-3. 下部为二维码和直达链接文案，二维码缺失时仅展示链接。
-4. 统一使用系统字体和自动换行策略，保证 iOS 13 上的渲染效果。
+3. 在 Logo 文案与分隔线之间可以添加作品图（`contentImage`），会在当前内容宽度内等比缩放、限制最大高度并自动圆角。
+4. 下部为二维码和直达链接文案，二维码缺失时仅展示链接。
+5. 统一使用系统字体和自动换行策略，保证 iOS 13 上的渲染效果。
 
 ## 下一步
 
