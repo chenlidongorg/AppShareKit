@@ -7,6 +7,7 @@ struct AppSharePayload {
     let logo: UIImage?
     let qrcode: UIImage?
     let officeURL: String?
+    let contentImage: UIImage?
 
     var sanitizedAppName: String {
         appName?.trimmedNonEmpty ?? "Your App"
@@ -26,7 +27,8 @@ struct AppSharePayload {
             sanitizedPrompt,
             sanitizedURL,
             logo?.pngData()?.sha256Hex ?? "no-logo",
-            qrcode?.pngData()?.sha256Hex ?? "no-qr"
+            qrcode?.pngData()?.sha256Hex ?? "no-qr",
+            contentImage?.pngData()?.sha256Hex ?? "no-content"
         ]
         return components.joined(separator: "|").sha256Hex
     }

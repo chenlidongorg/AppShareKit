@@ -13,6 +13,9 @@ final class ShareImageComposer {
         static let sectionSpacing: CGFloat = 32
         static let hintSpacing: CGFloat = 24
         static let separatorHeight: CGFloat = 1
+        static let contentImageSpacing: CGFloat = 32
+        static let contentImageMaxHeight: CGFloat = 420
+        static let contentImageCornerRadius: CGFloat = 32
     }
 
     private struct ResolvedLayout {
@@ -109,7 +112,9 @@ final class ShareImageComposer {
         let textBlockHeight = nameHeight + (promptHeight > 0 ? Layout.headerTextSpacing + promptHeight : 0)
         let logoHeight = hasLogo ? Layout.logoSize : 0
         let headerContentHeight = max(textBlockHeight, logoHeight)
-        return headerContentHeight + Layout.headerSeparatorSpacing + Layout.separatorHeight
+        let contentImageHeight = resolvedContentImageHeight(for: payload.contentImage, contentWidth: contentWidth)
+        let contentImageSpacing = contentImageHeight > 0 ? Layout.contentImageSpacing : 0
+        return headerContentHeight + contentImageSpacing + contentImageHeight + Layout.headerSeparatorSpacing + Layout.separatorHeight
     }
 
     private func measureFooterHeight(for payload: AppSharePayload, contentWidth: CGFloat) -> CGFloat {
@@ -220,7 +225,20 @@ final class ShareImageComposer {
             textBottomY = promptRect.maxY
         }
 
-        let contentBottom = max(logoBottomY, textBottomY)
+        var contentBottom = max(logoBottomY, textBottomY)
+        if let artwork = payload.contentImage {
+            let imageHeight = resolvedContentImageHeight(for: artwork, contentWidth: rect.width)
+            if imageHeight > 0 {
+                let imageRect = CGRect(
+                    x: rect.minX,
+                    y: contentBottom + Layout.contentImageSpacing,
+                    width: rect.width,
+                    height: imageHeight
+                )
+                draw(image: artwork, in: imageRect, cornerRadius: Layout.contentImageCornerRadius)
+                contentBottom = imageRect.maxY
+            }
+        }
         let separatorY = contentBottom + Layout.headerSeparatorSpacing
         let separatorRect = CGRect(x: rect.minX, y: separatorY, width: rect.width, height: Layout.separatorHeight)
         UIColor(white: 0.92, alpha: 1).setFill()
@@ -276,6 +294,17 @@ final class ShareImageComposer {
                 )
             }
         }
+    }
+
+    private func resolvedContentImageHeight(for image: UIImage?, contentWidth: CGFloat) -> CGFloat {
+        guard let image, contentWidth > 0 else { return 0 }
+        let size = image.size
+        guard size.width > 0, size.height > 0 else { return 0 }
+        let widthScale = contentWidth / size.width
+        guard widthScale > 0 else { return 0 }
+        let scaledHeight = size.height * widthScale
+        guard Layout.contentImageMaxHeight > 0 else { return scaledHeight }
+        return min(scaledHeight, Layout.contentImageMaxHeight)
     }
 
     private func draw(image: UIImage, in rect: CGRect, cornerRadius: CGFloat) {

@@ -15,6 +15,7 @@ public enum AppShareKit {
         logo: UIImage? = nil,
         qrcode: UIImage? = nil,
         officeURL: String? = nil,
+        contentImage: UIImage? = nil,
         shareButtonIcon: String? = nil,
         shareButtonImage: UIImage? = nil,
         shareButtonName: String? = nil,
@@ -25,7 +26,8 @@ public enum AppShareKit {
             prompt: prompt,
             logo: logo,
             qrcode: qrcode,
-            officeURL: officeURL
+            officeURL: officeURL,
+            contentImage: contentImage
         )
         let appearance = ShareButtonAppearance(
             iconSystemName: shareButtonIcon,
