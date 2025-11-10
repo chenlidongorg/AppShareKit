@@ -33,9 +33,9 @@ struct ContentView: View {
                 appName: "Hello AI", //可选
                 prompt: "AI 创作助手 · 秒出灵感",//可选
                 logo: UIImage(named: "app_logo"),//可选
-                contentImage: UIImage(named: "user_work"),//可选
                 qrcode: UIImage(named: "qr_install"),//可选
-                officeURL: "https://hello.ai/app"//可选
+                officeURL: "https://hello.ai/app",//可选
+                contentImage: UIImage(named: "user_work")//可选
             )
         } label: {
             Image(systemName: "square.and.arrow.up")
@@ -56,9 +56,9 @@ struct ShareSection: View {
             appName: "Hello AI",
             prompt: "AI 创作助手 · 秒出灵感",
             logo: UIImage(named: "app_logo"),
-            contentImage: UIImage(named: "user_work"),
             qrcode: UIImage(named: "qr_install"),
             officeURL: "https://hello.ai/app",
+            contentImage: UIImage(named: "user_work"),
             shareButtonIcon: "sparkles",
             shareButtonName: "立即分享"
         )
