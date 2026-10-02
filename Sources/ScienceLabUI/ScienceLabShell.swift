@@ -20,6 +20,7 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
     private let isCaptureConfirmed: Bool
     private let primaryAction: ScienceLabPrimaryAction
     private let appearance: ScienceLabAppearance
+    private let stageInteractionPolicy: ScienceLabStageInteractionPolicy
     private let palette: ScienceLabPalette
     private let labels: ScienceLabLabels
     private let initialReadoutMode: ScienceLabReadoutMode
@@ -51,6 +52,7 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
         isCaptureConfirmed: Bool = false,
         primaryAction: ScienceLabPrimaryAction = .simulation,
         appearance: ScienceLabAppearance = .system,
+        stageInteractionPolicy: ScienceLabStageInteractionPolicy = .bounded2D,
         palette: ScienceLabPalette = .standard,
         labels: ScienceLabLabels = .init(),
         initialReadoutMode: ScienceLabReadoutMode = .minimized,
@@ -70,6 +72,7 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
         self.isCaptureConfirmed = isCaptureConfirmed
         self.primaryAction = primaryAction
         self.appearance = appearance
+        self.stageInteractionPolicy = stageInteractionPolicy
         self.palette = palette
         self.labels = labels
         self.initialReadoutMode = initialReadoutMode
@@ -154,6 +157,9 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
     }
 
     private var cameraAccessibilityValue: String {
+        // World-camera metadata belongs to the tool. Do not report an unused
+        // two-dimensional observation camera as if it describes the world.
+        guard stageInteractionPolicy == .bounded2D else { return "" }
         #if DEBUG
         return viewport.accessibilityValue
         #else
@@ -166,13 +172,19 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
 
     @ViewBuilder
     private func viewportStage(size: CGSize) -> some View {
-        #if canImport(UIKit)
-        ScienceLabStageViewport(size: size, resetGeneration: viewportResetGeneration,
-                                viewport: $viewport,
-                                content: stage(size))
-        #else
-        stage(size)
-        #endif
+        switch stageInteractionPolicy {
+        case .bounded2D:
+            #if canImport(UIKit)
+            ScienceLabStageViewport(size: size, resetGeneration: viewportResetGeneration,
+                                    viewport: $viewport, content: stage(size))
+            #else
+            stage(size)
+            #endif
+        case .toolManaged:
+            // Keep the native view in the existing SwiftUI hierarchy: no
+            // shared ancestor recognizers, affine transform or extra hosting.
+            stage(size)
+        }
     }
 
     private func header(focused: Bool) -> some View {
@@ -200,8 +212,10 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
                     }
                     .accessibilityIdentifier("scienceLab.capture")
                     Button {
-                        viewportResetGeneration &+= 1
-                        viewport = ScienceLabViewportState(size: viewport.size)
+                        if stageInteractionPolicy == .bounded2D {
+                            viewportResetGeneration &+= 1
+                            viewport = ScienceLabViewportState(size: viewport.size)
+                        }
                         onReset()
                     } label: {
                         Label(labels.reset, systemImage: "arrow.counterclockwise")
