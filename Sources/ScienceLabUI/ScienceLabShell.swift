@@ -22,8 +22,9 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
     private let controls: () -> Controls
     private let readouts: () -> Readouts
     private let knowledge: () -> Knowledge
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scienceLabNavigationAction) private var navigationAction
     @State private var activeSheet: Sheet?
+    @State private var isFocused = false
 
     private enum Sheet: String, Identifiable {
         case commonParameters, knowledge
@@ -38,7 +39,7 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
         primaryAction: ScienceLabPrimaryAction = .simulation,
         palette: ScienceLabPalette = .standard,
         labels: ScienceLabLabels = .init(),
-        initialReadoutMode: ScienceLabReadoutMode = .expanded,
+        initialReadoutMode: ScienceLabReadoutMode = .minimized,
         onToggleRun: @escaping () -> Void,
         onReset: @escaping () -> Void,
         onCapture: @escaping () -> Void,
@@ -68,22 +69,44 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
 
     public var body: some View {
         GeometryReader { geometry in
-            let metrics = ScienceLabGeometry.layout(
-                for: geometry.size,
-                accessibilitySize: dynamicTypeSize.isAccessibilitySize
-            )
             ScienceLabGlassGroup {
-                VStack(spacing: metrics.spacing) {
-                    header
-                        .frame(height: metrics.headerHeight)
-                    stageArea
-                        .frame(height: metrics.stageHeight)
-                        .layoutPriority(1)
-                    dock(compact: metrics.usesCompactChrome)
-                        .frame(height: metrics.dockHeight)
+                ZStack(alignment: .topLeading) {
+                    stage(ScienceLabGeometry.sanitized(geometry.size))
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .accessibilityIdentifier("scienceLab.stage")
+                        .zIndex(0)
+
+                    VStack(spacing: 0) {
+                        header
+                            .opacity(isFocused ? 0 : 1)
+                            .allowsHitTesting(!isFocused)
+                            .accessibilityHidden(isFocused)
+                        Spacer(minLength: 0)
+                        dock
+                    }
+                    .padding(10)
+                    .zIndex(1)
+                    ScienceLabReadoutPanel(
+                        stageSize: geometry.size,
+                        labels: labels,
+                        initialMode: initialReadoutMode,
+                        readouts: readouts
+                    )
+                    .opacity(isFocused ? 0 : 1)
+                    .allowsHitTesting(!isFocused)
+                    .accessibilityHidden(isFocused)
+                    .zIndex(2)
+
+                    iconButton(label: isFocused ? labels.exitFocus : labels.focus,
+                               icon: isFocused ? "arrow.down.right.and.arrow.up.left" : "viewfinder",
+                               identifier: "scienceLab.focus") {
+                        isFocused.toggle()
+                    }
+                    .padding(10)
+                    .zIndex(3)
                 }
-                .padding(.horizontal, metrics.horizontalPadding)
-                .padding(.vertical, metrics.verticalPadding)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .clipped()
             }
         }
         .background(palette.canvas)
@@ -106,6 +129,13 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
 
     private var header: some View {
         HStack(spacing: 8) {
+            // Reserve only an overlay slot for the always-available focus control.
+            Color.clear.frame(width: 44, height: 44)
+            if let navigationAction {
+                iconButton(label: navigationAction.isBack ? labels.back : labels.close,
+                           icon: navigationAction.isBack ? "chevron.left" : "xmark",
+                           identifier: "scienceLab.navigation.dismiss", action: navigationAction.onDismiss)
+            }
             if showsTitle {
                 Text(title)
                     .font(.caption.weight(.semibold))
@@ -116,6 +146,7 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
             iconButton(label: labels.knowledge, icon: "info.circle", identifier: "scienceLab.knowledge") {
                 activeSheet = .knowledge
             }
+            iconButton(label: labels.advancedParameters, icon: "slider.horizontal.3", identifier: "scienceLab.advancedParameters", action: onParameters)
             Menu {
                 Button(action: onCapture) {
                     Label(isCaptureConfirmed ? labels.captureConfirmed : labels.capture,
@@ -136,38 +167,13 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
             .accessibilityLabel(Text(labels.moreActions))
             .accessibilityValue(Text(isCaptureConfirmed ? labels.captureConfirmed : ""))
             .accessibilityIdentifier("scienceLab.moreActions")
-            // The advanced entry remains the trailing-most top control.
-            iconButton(label: labels.advancedParameters, icon: "slider.horizontal.3", identifier: "scienceLab.advancedParameters", action: onParameters)
         }
     }
 
-    private var stageArea: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .topLeading) {
-                stage(ScienceLabGeometry.sanitized(geometry.size))
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .accessibilityIdentifier("scienceLab.stage")
-                ScienceLabReadoutPanel(
-                    stageSize: geometry.size,
-                    labels: labels,
-                    initialMode: initialReadoutMode,
-                    readouts: readouts
-                )
-            }
-            .frame(width: geometry.size.width, height: geometry.size.height)
-            // Clipping bounds the panel without applying glass to the canvas.
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        }
-    }
-
-    private func dock(compact: Bool) -> some View {
+    private var dock: some View {
         HStack(spacing: 12) {
             Button(action: onToggleRun) {
-                dockLabel(
-                    title: primaryAction.title ?? (isRunning ? labels.pause : labels.start),
-                    icon: primaryAction.systemImage ?? (isRunning ? "pause.fill" : "play.fill"),
-                    compact: compact
-                )
+                dockIcon(primaryAction.systemImage ?? (isRunning ? "pause.fill" : "play.fill"))
                 .foregroundStyle(palette.accent)
                 .modifier(ScienceLabSurface(cornerRadius: 20, interactive: true, tint: palette.accent.opacity(0.12)))
             }
@@ -178,30 +184,20 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
             .accessibilityIdentifier("scienceLab.primaryAction")
 
             Button { activeSheet = .commonParameters } label: {
-                dockLabel(title: labels.commonParameters, icon: "dial.min", compact: compact)
+                dockIcon("dial.min")
                     .modifier(ScienceLabSurface(cornerRadius: 20, interactive: true))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(labels.commonParameters))
             .accessibilityIdentifier("scienceLab.commonParameters")
         }
-        .frame(maxWidth: 480)
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private func dockLabel(title: String, icon: String, compact: Bool) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .semibold))
-            if !compact {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(minHeight: 48)
-        .padding(.horizontal, 12)
+    private func dockIcon(_ icon: String) -> some View {
+        Image(systemName: icon)
+            .font(.system(size: 18, weight: .semibold))
+        .frame(width: 48, height: 48)
         .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 

@@ -80,6 +80,8 @@ public struct ScienceLabLabels {
     public var advancedParameters = "Advanced parameters"
     public var knowledge = "How it works"
     public var moreActions = "More actions"
+    public var focus = "Focus stage"
+    public var exitFocus = "Exit focus"
     public var reset = "Reset experiment"
     public var capture = "Capture image"
     public var captureConfirmed = "Image captured"
@@ -104,6 +106,8 @@ public struct ScienceLabLabels {
         advancedParameters = localized("action.advancedParameters", fallback: advancedParameters)
         knowledge = localized("action.knowledge", fallback: knowledge)
         moreActions = localized("action.more", fallback: moreActions)
+        focus = localized("action.focus", fallback: focus)
+        exitFocus = localized("action.exitFocus", fallback: exitFocus)
         reset = localized("action.reset", fallback: reset)
         capture = localized("action.capture", fallback: capture)
         captureConfirmed = localized("status.captured", fallback: captureConfirmed)

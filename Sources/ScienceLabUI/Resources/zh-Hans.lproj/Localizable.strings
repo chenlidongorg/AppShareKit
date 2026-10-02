@@ -20,3 +20,17 @@
 "action.done" = "完成";
 "action.close" = "关闭";
 "action.back" = "返回";
+"export.preview" = "导出预览";
+"export.share" = "分享 PNG";
+"export.save" = "保存图片";
+"export.cancel" = "取消";
+"export.retry" = "重试";
+"export.preparing" = "正在生成 PNG…";
+"export.saving" = "正在保存图片…";
+"export.saved" = "图片已保存";
+"export.shared" = "图片已分享";
+"export.failed" = "导出未完成";
+"export.invalidImage" = "图片没有可用的像素。";
+"export.encodingFailed" = "无法生成 PNG 图片。";
+"action.focus" = "聚焦舞台";
+"action.exitFocus" = "退出聚焦";

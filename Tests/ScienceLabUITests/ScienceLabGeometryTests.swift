@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 import XCTest
 @testable import ScienceLabUI
 
@@ -32,6 +35,107 @@ final class ScienceLabGeometryTests: XCTestCase {
         let panel = ScienceLabGeometry.panelSize(in: stage, mode: .expanded)
         XCTAssertLessThanOrEqual(panel.height, stage.height * 0.52)
         XCTAssertLessThan(panel.width * panel.height, stage.width * stage.height * 0.5)
+    }
+
+    func testLargeDynamicTypeUsesMoreReadableDataSpace() {
+        let stage = CGSize(width: 390, height: 580)
+        let normal = ScienceLabGeometry.panelSize(in: stage, mode: .expanded)
+        let accessibility = ScienceLabGeometry.panelSize(in: stage, mode: .expanded, accessibilitySize: true)
+        XCTAssertGreaterThan(accessibility.width, normal.width)
+        XCTAssertGreaterThan(accessibility.height, normal.height)
+        let frame = ScienceLabGeometry.frame(at: .topTrailing, panelSize: accessibility, in: stage)
+        XCTAssertLessThanOrEqual(frame.maxX, stage.width)
+        XCTAssertLessThanOrEqual(frame.maxY, stage.height)
+    }
+
+    func testCompactLandscapeKeepsPanelToggleUsable() {
+        for stage in [CGSize(width: 708, height: 184), CGSize(width: 740, height: 190), CGSize(width: 320, height: 180)] {
+            for accessibility in [false, true] {
+                XCTAssertEqual(ScienceLabGeometry.displayMode(for: .expanded, in: stage, accessibilitySize: accessibility), .minimized)
+                let size = ScienceLabGeometry.panelSize(in: stage, mode: .expanded, accessibilitySize: accessibility)
+                XCTAssertEqual(size.height, ScienceLabGeometry.readoutHeaderHeight)
+                XCTAssertGreaterThanOrEqual(size.height, 44)
+                // A 44-point toggle, a drag handle, and horizontal padding.
+                XCTAssertGreaterThanOrEqual(size.width, 44 + 44 + 16)
+            }
+        }
+    }
+
+    func testExpandedPanelsHaveAUsableScrollingRegion() {
+        for width in [CGFloat(320), 390, 768] {
+            for height in [CGFloat(116), 184, 260, 300, 580, 650] {
+                for accessibility in [false, true] {
+                    let stage = CGSize(width: width, height: height)
+                    let mode = ScienceLabGeometry.displayMode(for: .expanded, in: stage, accessibilitySize: accessibility)
+                    let size = ScienceLabGeometry.panelSize(in: stage, mode: .expanded, accessibilitySize: accessibility)
+                    if mode == .expanded {
+                        XCTAssertGreaterThanOrEqual(size.height - ScienceLabGeometry.readoutHeaderHeight,
+                                                    accessibility ? 112 : 56)
+                    } else {
+                        XCTAssertEqual(size.height, ScienceLabGeometry.readoutHeaderHeight)
+                    }
+                }
+            }
+        }
+    }
+
+    func testRestoringCompactReadoutsExposesData() {
+        let stage = CGSize(width: 708, height: 184)
+        let restored = ScienceLabGeometry.restoredMode(in: stage)
+        XCTAssertEqual(restored, .maximized)
+        XCTAssertEqual(ScienceLabGeometry.displayMode(for: restored, in: stage), .maximized)
+        let size = ScienceLabGeometry.panelSize(in: stage, mode: restored)
+        XCTAssertGreaterThan(size.height - ScienceLabGeometry.readoutHeaderHeight, 56)
+        XCTAssertEqual(ScienceLabGeometry.restoredMode(in: CGSize(width: 390, height: 580)), .expanded)
+    }
+
+    func testAdaptiveMinimizationPreservesAnchorThroughRotation() {
+        let saved = ScienceLabNormalizedPosition(x: 0.28, y: 0.69)
+        for stage in [CGSize(width: 390, height: 580), CGSize(width: 708, height: 184), CGSize(width: 390, height: 580)] {
+            let panel = ScienceLabGeometry.panelSize(in: stage, mode: .expanded)
+            let resolved = ScienceLabGeometry.position(after: .zero, from: saved, panelSize: panel, in: stage)
+            XCTAssertEqual(resolved.x, saved.x, accuracy: 0.0001)
+            XCTAssertEqual(resolved.y, saved.y, accuracy: 0.0001)
+        }
+    }
+
+    func testResizeCancelsUncommittedDragAndPreservesSavedAnchor() {
+        let saved = ScienceLabNormalizedPosition(x: 0.3, y: 0.7)
+        let originalStage = CGSize(width: 390, height: 580)
+        let resizedStage = CGSize(width: 708, height: 184)
+        let original = ScienceLabDragGeometry(container: originalStage, panel: ScienceLabGeometry.panelSize(in: originalStage, mode: .expanded))
+        let resizedPanel = ScienceLabGeometry.panelSize(in: resizedStage, mode: .expanded)
+        let resized = ScienceLabDragGeometry(container: resizedStage, panel: resizedPanel)
+        let translation = ScienceLabGeometry.dragTranslation(CGSize(width: -90, height: 120), startedIn: original, current: resized)
+        XCTAssertEqual(translation, CGSize.zero)
+        let preserved = ScienceLabGeometry.position(after: translation, from: saved, panelSize: resizedPanel, in: resizedStage)
+        XCTAssertEqual(preserved.x, saved.x, accuracy: 0.0001)
+        XCTAssertEqual(preserved.y, saved.y, accuracy: 0.0001)
+    }
+
+    func testPanelModeChangeCancelsTransientDrag() {
+        let stage = CGSize(width: 390, height: 580)
+        let expanded = ScienceLabDragGeometry(container: stage, panel: ScienceLabGeometry.panelSize(in: stage, mode: .expanded))
+        let maximized = ScienceLabDragGeometry(container: stage, panel: ScienceLabGeometry.panelSize(in: stage, mode: .maximized))
+        XCTAssertEqual(ScienceLabGeometry.dragTranslation(CGSize(width: 20, height: 50), startedIn: expanded, current: maximized), CGSize.zero)
+        XCTAssertEqual(ScienceLabGeometry.dragTranslation(CGSize(width: -20, height: 50), startedIn: expanded, current: expanded), CGSize(width: -20, height: 50))
+    }
+
+    func testDragTranslationSanitizesInvalidComponents() {
+        let context = ScienceLabDragGeometry(container: CGSize(width: 390, height: 580), panel: CGSize(width: 304, height: 244))
+        XCTAssertEqual(ScienceLabGeometry.dragTranslation(CGSize(width: CGFloat.infinity, height: CGFloat.nan), startedIn: context, current: context), CGSize.zero)
+    }
+
+    func testInactiveSceneCancelsDragWithoutChangingSavedPosition() {
+        let stage = CGSize(width: 390, height: 580)
+        let panel = ScienceLabGeometry.panelSize(in: stage, mode: .expanded)
+        let context = ScienceLabDragGeometry(container: stage, panel: panel)
+        let saved = ScienceLabNormalizedPosition(x: 0.4, y: 0.6)
+        let cancelled = ScienceLabGeometry.dragTranslation(CGSize(width: 90, height: -70), startedIn: context, current: context, isActive: false)
+        XCTAssertEqual(cancelled, CGSize.zero)
+        let preserved = ScienceLabGeometry.position(after: cancelled, from: saved, panelSize: panel, in: stage)
+        XCTAssertEqual(preserved.x, saved.x, accuracy: 0.0001)
+        XCTAssertEqual(preserved.y, saved.y, accuracy: 0.0001)
     }
 
     func testMaximizedPanelIsExactlyInsideStageInsets() {
@@ -113,10 +217,10 @@ final class ScienceLabGeometryTests: XCTestCase {
         }
     }
 
-    func testCompactLandscapeReservesVisibleStage() {
+    func testLandscapeStageUsesFullAvailableHeight() {
         let layout = ScienceLabGeometry.layout(for: CGSize(width: 740, height: 300))
         XCTAssertTrue(layout.usesCompactChrome)
-        XCTAssertEqual(layout.stageHeight, 184)
+        XCTAssertEqual(layout.stageHeight, 300)
         XCTAssertGreaterThan(layout.stageHeight, layout.headerHeight + layout.dockHeight)
     }
 
@@ -128,24 +232,25 @@ final class ScienceLabGeometryTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(layout.headerHeight, 44)
     }
 
-    func testLayoutNeverUsesMoreThanAvailableHeightWhenChromeFits() {
-        for height in stride(from: 116, through: 1100, by: 13) {
+    func testOverlaidChromeNeverReducesStageOrAddsOuterMargins() {
+        for height in stride(from: 0, through: 1100, by: 13) {
             let metrics = ScienceLabGeometry.layout(for: CGSize(width: 390, height: CGFloat(height)))
-            let used = metrics.stageHeight + metrics.headerHeight + metrics.dockHeight
-                + metrics.spacing * 2 + metrics.verticalPadding * 2
-            XCTAssertEqual(used, CGFloat(height), accuracy: 0.0001)
+            XCTAssertEqual(metrics.stageHeight, CGFloat(height), accuracy: 0.0001)
+            XCTAssertEqual(metrics.horizontalPadding, 0)
+            XCTAssertEqual(metrics.verticalPadding, 0)
+            XCTAssertEqual(metrics.spacing, 0)
         }
     }
 
     func testInvalidGeometryNeverEscapesAsNaNOrNegativeSize() {
         let frame = ScienceLabGeometry.frame(
-            at: .init(x: .nan, y: .infinity),
-            panelSize: CGSize(width: -100, height: .infinity),
-            in: CGSize(width: .nan, height: -20),
-            translation: CGSize(width: .infinity, height: .nan)
+            at: .init(x: CGFloat.nan, y: CGFloat.infinity),
+            panelSize: CGSize(width: -100, height: CGFloat.infinity),
+            in: CGSize(width: CGFloat.nan, height: -20),
+            translation: CGSize(width: CGFloat.infinity, height: CGFloat.nan)
         )
-        XCTAssertEqual(frame, .zero)
-        let layout = ScienceLabGeometry.layout(for: CGSize(width: -10, height: .infinity))
+        XCTAssertEqual(frame, CGRect.zero)
+        let layout = ScienceLabGeometry.layout(for: CGSize(width: -10, height: CGFloat.infinity))
         XCTAssertEqual(layout.stageHeight, 0)
     }
 }

@@ -59,11 +59,11 @@ The shell has four generic view parameters (`Stage`, `Controls`, `Readouts`, `Kn
 - `primaryAction: ScienceLabPrimaryAction = .simulation`
 - `palette: ScienceLabPalette = .standard`
 - `labels: ScienceLabLabels = .init()`
-- `initialReadoutMode: ScienceLabReadoutMode = .expanded`
+- `initialReadoutMode: ScienceLabReadoutMode = .minimized`
 
 For non-simulation tools, `ScienceLabPrimaryAction(title: "Search", systemImage: "magnifyingglass", isEnabled: true)` changes the first button's presentation. Its callback is still `onToggleRun`; supply the tool's real action rather than introducing fake simulation state. The second button remains Common Parameters. Set `isEnabled` false when the primary action is unavailable.
 
-`ScienceLabLabels` loads English, Simplified Chinese and Traditional Chinese resources by default. Its public mutable properties allow existing host localizations to override individual values:
+`ScienceLabLabels` includes native-language resources for all 52 existing tool locales, including export and focus controls. Its public mutable properties allow existing host localizations to override individual values:
 
 ```swift
 var labels = ScienceLabLabels()
@@ -71,7 +71,7 @@ labels.start = LocalizedInfo.localized("action.start")
 labels.pause = LocalizedInfo.localized("action.pause")
 ```
 
-Untranslated locales fall back to English. This target does not claim that all existing tool locales have new shell translations.
+Locale resources are checked for matching keys and valid property-list syntax; these checks do not replace runtime layout review.
 
 ### Outer navigation header
 
@@ -95,17 +95,22 @@ Use textual labels, symbols and units in addition to color; the shell cannot inf
 ## Interaction and layout
 
 - No outer ScrollView: the stage is visible immediately
-- Bottom-centered pair: combined Start/Pause and Common Parameters
-- Upper-right trailing button: Advanced Parameters; adjacent menu: capture/reset; dedicated information button: knowledge sheet
+- Bottom-centered pair of 48-point icon buttons: combined Start/Pause and Common Parameters, with localized accessibility names
+- Upper-right order: Help, Advanced Parameters, More (capture/reset). Controls overlay the full-size stage; no header/dock row or outer margin consumes canvas space
+- Upper-left focus toggle hides top controls, navigation dismissal, and readouts while retaining the bottom two controls. Restoring focus preserves readout position/mode and scientific state
+- The host can supply `scienceLabNavigationAction` to place its existing dismissal callback in the chrome layer; an existing outer header should then be omitted
 - Output data is inside the stage in an ultra-thin-material/native-glass panel
-- Drag only its handle/title region; stage gestures, readout scrolling and sheet sliders remain separate
-- Minimize, restore and maximize buttons have explicit VoiceOver labels
+- Initially minimized means header only; all output data is hidden, with no data summary in the header
+- The entire header except the toggle button is draggable; stage gestures, readout scrolling and sheet sliders remain separate
+- One combined toggle expands directly to maximized data or minimizes back to the header. Its icon and VoiceOver label change with its state
 - VoiceOver actions on the handle include center, reset position, minimize/restore and maximize/restore
 - Normalized positioning preserves proportional placement across rotation, split view, panel size changes and maximize/restore
 - Geometry sanitizes non-finite input and clamps panel origin and dimensions inside the stage
-- Expanded/maximized readouts scroll internally; ordinary output panel leaves the majority of stage area visible on normal supported screen sizes
-- Compact-height or accessibility Dynamic Type uses icon-only dock labels with full accessibility names, leaving the type size untouched and preserving 44-point targets
-- At 740×300 points of safe-area space, the stage is 184 points tall. A host must supply at least 116 points of available height for the fixed 44-point interactive chrome to fit; severely smaller arbitrary proposals cannot preserve both a useful stage and accessible controls
+- Maximized readouts scroll vertically with no content-length limit. Overlaying the stage is intentional; minimizing immediately returns stage space
+- An optional ordinary expanded mode remains available through VoiceOver actions; when too short for a usable scrolling region, it presents the header instead
+- Resize, rotation, panel mode changes and leaving the active scene cancel an unfinished drag. GestureState discards that transient movement and retains the last committed normalized anchor
+- Dock controls are always icon-only; header controls retain 44-point targets and full accessibility names
+- At 740×300 points of safe-area space, the canvas receives all 740×300 points. Very small proposals still clamp data geometry; the containing host must supply enough room for accessible controls
 - Shell respects the host safe area; it never consults a screen singleton or ignores safe areas
 
 ## Materials and accessibility
@@ -114,13 +119,19 @@ Glass applies only to controls and the data overlay, never the animation canvas.
 
 Common-parameter sheets support medium/large detents on iOS 16+, use large at accessibility Dynamic Type, and use a normal system sheet on iOS 15. Knowledge opens its own large sheet.
 
-UI automation identifiers include `scienceLab.stage`, `scienceLab.primaryAction`, `scienceLab.commonParameters`, `scienceLab.advancedParameters`, `scienceLab.moreActions`, `scienceLab.capture`, `scienceLab.reset`, `scienceLab.knowledge`, `scienceLab.readouts`, `scienceLab.readouts.dragHandle`, `scienceLab.readouts.content`, `scienceLab.readouts.minimize`, and `scienceLab.readouts.maximize`. Presented sheets use `scienceLab.commonParameters.sheet` / `scienceLab.knowledge.sheet`; their Done buttons append `.done` to the respective sheet identifier.
+UI automation identifiers include `scienceLab.stage`, `scienceLab.focus`, `scienceLab.primaryAction`, `scienceLab.commonParameters`, `scienceLab.advancedParameters`, `scienceLab.moreActions`, `scienceLab.capture`, `scienceLab.reset`, `scienceLab.knowledge`, `scienceLab.readouts`, `scienceLab.readouts.dragHandle`, `scienceLab.readouts.content`, and `scienceLab.readouts.toggle`. Presented sheets use `scienceLab.commonParameters.sheet` / `scienceLab.knowledge.sheet`; their Done buttons append `.done` to the respective sheet identifier.
+
+## Image export and sharing
+
+On iOS / Mac Catalyst 15+, `ScienceLabExportPresenter.present(image:title:presenter:onSave:)` opens one export preview per foreground window. Supply an explicit originating `UIViewController` when available. The optional host save callback receives the normalized image and a `Result<Void, Error>` completion; the host keeps control of photo-library permissions.
+
+The preview prepares an original-pixel-size PNG with normalized orientation and alpha, shows the image and file dimensions, and offers native sharing and saving. Processing blocks repeated actions. Preparation, save and share errors show retry. Cancelling a native share returns to preview; closing the preview ignores late save callbacks and removes its temporary PNG. Cancelling cannot undo a save already sent to the host. iPad sharing uses the preview's own view with an in-bounds source rectangle.
 
 ## Validation status and required Mac checkpoint
 
-This delivery was authored on Linux, which has **no Swift or Xcode toolchain installed**. It has **not been Swift-compiled**, and XCTest, previews, Simulator, VoiceOver, native iOS 26 materials and physical touch behavior have **not been executed** here. Source and localization consistency checks are not a substitute for a Mac build.
+The original delivery was authored on Linux without Swift or Xcode. The local Mac baseline test build found missing `contentImage` in an old share test, ambiguous `CGFloat.infinity` in geometry tests, and a missing CoreGraphics import that would become a Swift 6 error. These source issues have been repaired. On 2026-10-02, 34 native simulator tests passed (23 geometry, 10 PNG/export, 1 composer). The new stage and focus interaction still requires host UI acceptance; source and localization checks do not confirm it.
 
-`Tests/ScienceLabUITests/ScienceLabGeometryTests.swift` contains 14 pure-geometry XCTest cases covering edge clamps, oversized bounds, minimized/expanded/maximized sizes, tiny proposals, drag normalization, rotation, restoration, compact landscape, Dynamic Type sizing and invalid geometry. Its geometry implementation imports Foundation only. SwiftUI files use `#if canImport(SwiftUI)`, so a future Linux Swift installation can run those geometry tests without SwiftUI, but no such test execution has occurred in this workspace.
+`Tests/ScienceLabUITests/ScienceLabGeometryTests.swift` contains 23 geometry XCTest cases covering edge clamps, panel sizes, tiny proposals, normalized positioning, rotation, restoration, compact landscape, Dynamic Type, invalid geometry and cancelled transient movement. CoreGraphics is imported conditionally so these geometry helpers remain usable without SwiftUI. `ScienceLabExportTests.swift` adds 10 UIKit tests for PNG pixels/orientation/alpha, temporary files, cancellation, deduplication and retry. Actual header dragging, scene interruption and iPad share anchoring still require runtime UI validation.
 
 Before rollout:
 

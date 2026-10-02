@@ -1,7 +1,10 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 /// Presentation state is independent of any scientific model or SwiftUI view.
-public enum ScienceLabReadoutMode: String, CaseIterable {
+public enum ScienceLabReadoutMode: String, CaseIterable, Hashable {
     case minimized
     case expanded
     case maximized
@@ -31,10 +34,55 @@ public struct ScienceLabLayoutMetrics: Equatable {
     public let stageHeight: CGFloat
 }
 
+/// A drag is only meaningful in the geometry in which it started. A resize or
+/// mode change cancels the transient translation, preserving the saved anchor.
+struct ScienceLabDragGeometry: Equatable, Hashable {
+    let containerWidth: CGFloat
+    let containerHeight: CGFloat
+    let panelWidth: CGFloat
+    let panelHeight: CGFloat
+
+    init(container: CGSize, panel: CGSize) {
+        let container = ScienceLabGeometry.sanitized(container)
+        let panel = ScienceLabGeometry.sanitized(panel)
+        containerWidth = container.width
+        containerHeight = container.height
+        panelWidth = panel.width
+        panelHeight = panel.height
+    }
+}
+
 /// Pure geometry, intentionally kept free of SwiftUI and screen-singleton APIs.
 public enum ScienceLabGeometry {
     public static let defaultInset: CGFloat = 10
     public static let readoutHeaderHeight: CGFloat = 48
+    private static let minimumReadoutBodyHeight: CGFloat = 56
+
+    /// Small stages keep an operable header instead of a barely visible
+    /// scrolling region. Explicit maximization remains available in every size.
+    public static func displayMode(
+        for requestedMode: ScienceLabReadoutMode,
+        in container: CGSize,
+        accessibilitySize: Bool = false,
+        inset: CGFloat = defaultInset
+    ) -> ScienceLabReadoutMode {
+        guard requestedMode == .expanded else { return requestedMode }
+        let preferred = expandedPanelSize(in: container, accessibilitySize: accessibilitySize, inset: inset)
+        let minimumBody = accessibilitySize ? minimumReadoutBodyHeight * 2 : minimumReadoutBodyHeight
+        return preferred.width >= 160 && preferred.height >= readoutHeaderHeight + minimumBody
+            ? .expanded : .minimized
+    }
+
+    /// Restoring in a compact window opens readable data rather than immediately
+    /// folding the panel again. It does not change the user's saved position.
+    public static func restoredMode(
+        in container: CGSize,
+        accessibilitySize: Bool = false,
+        inset: CGFloat = defaultInset
+    ) -> ScienceLabReadoutMode {
+        displayMode(for: .expanded, in: container, accessibilitySize: accessibilitySize, inset: inset) == .expanded
+            ? .expanded : .maximized
+    }
 
     public static func finiteNonnegative(_ value: CGFloat) -> CGFloat {
         value.isFinite ? max(0, value) : 0
@@ -69,23 +117,39 @@ public enum ScienceLabGeometry {
         inset: CGFloat = defaultInset
     ) -> CGSize {
         let bounds = availableBounds(in: container, inset: inset)
-        switch mode {
+        switch displayMode(for: mode, in: container, accessibilitySize: accessibilitySize, inset: inset) {
         case .minimized:
             return CGSize(width: min(224, bounds.width), height: min(readoutHeaderHeight, bounds.height))
         case .expanded:
-            // The ordinary panel leaves most of the simulation available.
-            // Larger Dynamic Type uses more space, with a scrolling body.
-            let preferredWidth: CGFloat = accessibilitySize ? 360 : 304
-            let heightFraction: CGFloat = accessibilitySize ? 0.72 : 0.52
-            let preferredHeight: CGFloat = accessibilitySize ? 360 : 244
-            return CGSize(
-                width: min(preferredWidth, bounds.width),
-                height: min(bounds.height, max(min(readoutHeaderHeight, bounds.height),
-                    min(preferredHeight, bounds.height * heightFraction)))
-            )
+            return expandedPanelSize(in: container, accessibilitySize: accessibilitySize, inset: inset)
         case .maximized:
             return bounds.size
         }
+    }
+
+    private static func expandedPanelSize(
+        in container: CGSize,
+        accessibilitySize: Bool,
+        inset: CGFloat
+    ) -> CGSize {
+        let bounds = availableBounds(in: container, inset: inset)
+        return CGSize(
+            width: min(accessibilitySize ? 360 : 304, bounds.width),
+            height: min(accessibilitySize ? 360 : 244, bounds.height * (accessibilitySize ? 0.72 : 0.52))
+        )
+    }
+
+    static func dragTranslation(
+        _ translation: CGSize,
+        startedIn original: ScienceLabDragGeometry,
+        current: ScienceLabDragGeometry,
+        isActive: Bool = true
+    ) -> CGSize {
+        guard isActive, original == current else { return .zero }
+        return CGSize(
+            width: translation.width.isFinite ? translation.width : 0,
+            height: translation.height.isFinite ? translation.height : 0
+        )
     }
 
     /// Constrains both the panel's origin and its dimensions to the stage.
@@ -151,27 +215,21 @@ public enum ScienceLabGeometry {
         )
     }
 
-    /// Reserve only compact chrome; common controls live in a sheet, never in
-    /// an oversized panel below the stage. Input is the safe-area proposal.
+    /// Chrome overlays the stage; no rows or outer margins consume its size.
+    /// Input is the safe-area proposal supplied by the containing window.
     public static func layout(
         for availableSize: CGSize,
         accessibilitySize: Bool = false
     ) -> ScienceLabLayoutMetrics {
         let size = sanitized(availableSize)
-        let compact = size.height < 420 || accessibilitySize
-        let verticalPadding: CGFloat = compact ? 4 : 8
-        let spacing: CGFloat = compact ? 4 : 8
-        let headerHeight: CGFloat = 48
-        let dockHeight: CGFloat = compact ? 52 : 60
-        let chromeHeight = 2 * verticalPadding + 2 * spacing + headerHeight + dockHeight
         return ScienceLabLayoutMetrics(
-            usesCompactChrome: compact,
-            horizontalPadding: size.width < 400 ? 10 : 16,
-            verticalPadding: verticalPadding,
-            spacing: spacing,
-            headerHeight: headerHeight,
-            dockHeight: dockHeight,
-            stageHeight: max(0, size.height - chromeHeight)
+            usesCompactChrome: true,
+            horizontalPadding: 0,
+            verticalPadding: 0,
+            spacing: 0,
+            headerHeight: 44,
+            dockHeight: 48,
+            stageHeight: size.height
         )
     }
 }
