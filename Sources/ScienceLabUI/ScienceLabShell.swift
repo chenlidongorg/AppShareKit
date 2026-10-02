@@ -96,21 +96,24 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
             let safeInsets = geometry.safeAreaInsets
             let stageSize = CGSize(width: geometry.size.width + safeInsets.leading + safeInsets.trailing,
                                    height: geometry.size.height + safeInsets.top + safeInsets.bottom)
-            ScienceLabGlassGroup {
-                ZStack(alignment: .topLeading) {
-                    // Render through system safe areas. Controls and movable data
-                    // continue to use the unobscured window geometry below.
-                    ZStack {
-                        viewportStage(size: ScienceLabGeometry.sanitized(stageSize))
-                    }
-                        .frame(width: stageSize.width, height: stageSize.height)
-                        .clipped()
-                        .offset(x: -safeInsets.leading, y: -safeInsets.top)
-                        .accessibilityElement(children: .contain)
-                        .accessibilityIdentifier("scienceLab.stage")
-                        .accessibilityValue(Text(cameraValue))
-                        .zIndex(0)
+            ZStack(alignment: .topLeading) {
+                // Render through system safe areas. Controls and movable data
+                // continue to use the unobscured window geometry below.
+                ZStack {
+                    viewportStage(size: ScienceLabGeometry.sanitized(stageSize))
+                }
+                    .frame(width: stageSize.width, height: stageSize.height)
+                    .clipped()
+                    .offset(x: -safeInsets.leading, y: -safeInsets.top)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("scienceLab.stage")
+                    .accessibilityValue(Text(cameraValue))
+                    .zIndex(0)
 
+                // Glass composition belongs only to its control layer.
+                // Including the stage/readout foreground in the same
+                // container lets its backdrop blur the actual data text.
+                ScienceLabGlassGroup {
                     VStack(spacing: 0) {
                         header(focused: focused)
                         if showsTitle && !focused {
@@ -120,22 +123,22 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
                         Spacer(minLength: 0)
                         dock
                     }
-                    .padding(10)
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .zIndex(1)
-                    ScienceLabReadoutPanel(
-                        stageSize: geometry.size,
-                        isVisible: !focused,
-                        labels: labels,
-                        initialMode: initialReadoutMode,
-                        initialHeaderOffset: showsTitle ? 124 : 54,
-                        readouts: readouts
-                    )
-                    .zIndex(2)
-
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+                .padding(10)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .zIndex(1)
+                ScienceLabReadoutPanel(
+                    stageSize: geometry.size,
+                    isVisible: !focused,
+                    labels: labels,
+                    initialMode: initialReadoutMode,
+                    initialHeaderOffset: showsTitle ? 124 : 54,
+                    readouts: readouts
+                )
+                .zIndex(2)
+
             }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
         .background(palette.canvas)
         .environment(\.scienceLabPalette, palette)

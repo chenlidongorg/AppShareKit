@@ -110,7 +110,15 @@ struct ScienceLabReadoutPanel<Readouts: View>: View {
                 }
                 .frame(width: frame.width, height: frame.height)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .modifier(ScienceLabSurface(cornerRadius: 18))
+                .background {
+                    // Keep controls and scrolling above the decorative glass.
+                    // Wrapping the entire panel in glass intercepts child
+                    // button touches on iPadOS 27; the backdrop has no input.
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color.clear)
+                        .modifier(ScienceLabSurface(cornerRadius: 18))
+                        .allowsHitTesting(false)
+                }
                 .shadow(color: .black.opacity(0.10), radius: 10, y: 3)
                 .position(x: frame.midX, y: frame.midY)
                 .accessibilityElement(children: .contain)
