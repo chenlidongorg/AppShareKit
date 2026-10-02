@@ -248,3 +248,9 @@ Actual native run `Audit/tests/AppShareKit-20261003-020718.xcresult` passed 64/6
 This checkpoint does not certify all tools, iPad window/share positioning, production photo permissions, or final remote host integration.
 
 UIKit primary references: [adaptive presentation dismissal](https://developer.apple.com/documentation/uikit/uiadaptivepresentationcontrollerdelegate/presentationcontrollerdiddismiss(_:)), [popover dismissal](https://developer.apple.com/documentation/uikit/uipopoverpresentationcontrollerdelegate/popoverpresentationcontrollerdiddismisspopover(_:)).
+
+## Reusable parameter-page presentation (2026-10-03)
+
+`ScienceLabSheet` is now public so tools can reuse the same parameter, knowledge and settings presentation. Its existing behavior is unchanged: a scrolling content column, 680-point content limit, stack navigation on iPad, one Done control, Dynamic Type adaptation and supported-system medium/large detents. A tool's advanced page uses identifier `scienceLab.advancedParameters.sheet`; the component supplies its corresponding Done identifier and dismisses the actual sheet.
+
+Native `AppShareKit-20261003-023248.xcresult` passed 64/64 with no failures, skips or runtime warnings and unchanged source hashes. Actual host `Host-rollout-02-inclined-shared-parameters-light-20261003-023249.xcresult` passed the complete Inclined interaction/focus/parameter/handle/rotation/background/export-cancel-retry/home test. The earlier 022636 Inclined chrome failure was the unstandardized advanced completion control; the actual downhill and endpoint test in that bundle had passed. iPad and other tool pages still require their own actual runs.

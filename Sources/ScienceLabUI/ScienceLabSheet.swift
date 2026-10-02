@@ -2,7 +2,7 @@
 import SwiftUI
 
 @available(iOS 15.0, macCatalyst 15.0, *)
-struct ScienceLabSheet<Content: View>: View {
+public struct ScienceLabSheet<Content: View>: View {
     let title: String
     let doneLabel: String
     let prefersLarge: Bool
@@ -10,7 +10,7 @@ struct ScienceLabSheet<Content: View>: View {
     private let content: () -> Content
     @Environment(\.dismiss) private var dismiss
 
-    init(title: String, doneLabel: String, prefersLarge: Bool, identifier: String, @ViewBuilder content: @escaping () -> Content) {
+    public init(title: String, doneLabel: String, prefersLarge: Bool, identifier: String, @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.doneLabel = doneLabel
         self.prefersLarge = prefersLarge
@@ -18,7 +18,7 @@ struct ScienceLabSheet<Content: View>: View {
         self.content = content
     }
 
-    var body: some View {
+    public var body: some View {
         sheetContent
             .modifier(ScienceLabSheetSizing(prefersLarge: prefersLarge))
             .accessibilityElement(children: .contain)
