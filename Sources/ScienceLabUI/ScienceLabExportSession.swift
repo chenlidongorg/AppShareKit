@@ -93,6 +93,7 @@ final class ScienceLabExportSession: ObservableObject {
     }
 
     let title: String
+    let appearance: ScienceLabAppearance
     private let image: UIImage
     private let onSave: ScienceLabExportSaveHandler?
     private let fileBuilder: (UIImage, String) async throws -> ScienceLabExportFile
@@ -104,6 +105,7 @@ final class ScienceLabExportSession: ObservableObject {
 
     init(image: UIImage, title: String, onSave: ScienceLabExportSaveHandler? = nil,
          fileBuilder: @escaping (UIImage, String) async throws -> ScienceLabExportFile = ScienceLabExportPNG.prepare) {
+        self.appearance = image.scienceLabExportAppearance
         self.image = image
         self.previewImage = image
         self.title = title

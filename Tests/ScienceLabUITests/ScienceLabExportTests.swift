@@ -53,6 +53,55 @@ final class ScienceLabExportTests: XCTestCase {
         XCTAssertEqual(alpha.filter { $0 == 255 }.count, 5)
     }
 
+    func testDarkFieldPresentationMetadataPreservesScientificPNGPixelsAndActualUIKitTrait() async throws {
+        let source = image()
+        let before = try ScienceLabExportPNG.data(for: source).0
+        source.scienceLabExportAppearance = .dark
+        XCTAssertEqual(try ScienceLabExportPNG.data(for: source).0, before,
+                       "Presentation appearance must never recolor scientific pixels or lose alpha")
+        let session = ScienceLabExportSession(image: source, title: "Dark detector", onSave: nil)
+        defer { session.cancel() }
+        let controller = ScienceLabExportPresenter.makeController(session: session)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        controller.view.layoutIfNeeded()
+        XCTAssertEqual(controller.overrideUserInterfaceStyle, .dark)
+        let dark = expectation(for: NSPredicate { _, _ in controller.view.traitCollection.userInterfaceStyle == .dark }, evaluatedWith: nil)
+        await fulfillment(of: [dark], timeout: 3)
+        XCTAssertEqual(controller.view.traitCollection.userInterfaceStyle, .dark)
+        XCTAssertEqual(try XCTUnwrap(UIImage(data: before)).scienceLabExportAppearance, .system,
+                       "The in-memory presentation preference is not invented PNG science metadata")
+    }
+
+    func testOrdinaryNativePreviewInheritsItsPresentingControllerAppearance() async {
+        let source = image()
+        XCTAssertEqual(source.scienceLabExportAppearance, .system)
+        let session = ScienceLabExportSession(image: source, title: "Adaptive experiment", onSave: nil)
+        defer { session.cancel() }
+        let controller = ScienceLabExportPresenter.makeController(session: session)
+        let parent = UIViewController()
+        parent.overrideUserInterfaceStyle = .light
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = parent
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true; window.rootViewController = nil }
+        parent.addChild(controller)
+        parent.view.addSubview(controller.view)
+        controller.didMove(toParent: parent)
+        parent.view.layoutIfNeeded()
+        XCTAssertEqual(controller.overrideUserInterfaceStyle, .unspecified)
+        XCTAssertEqual(controller.view.traitCollection.userInterfaceStyle, .light)
+        parent.overrideUserInterfaceStyle = .dark
+        let changed = expectation(for: NSPredicate { _, _ in controller.view.traitCollection.userInterfaceStyle == .dark }, evaluatedWith: nil)
+        await fulfillment(of: [changed], timeout: 3)
+        XCTAssertEqual(controller.view.traitCollection.userInterfaceStyle, .dark)
+        controller.willMove(toParent: nil)
+        controller.view.removeFromSuperview()
+        controller.removeFromParent()
+    }
+
     func testPNGNormalizesRotatedOrientationWithoutDownsampling() throws {
         for orientation in [UIImage.Orientation.left, .right, .leftMirrored, .rightMirrored] {
             let (data, width, height) = try ScienceLabExportPNG.data(for: image(orientation: orientation, scale: 3))
@@ -162,6 +211,29 @@ final class ScienceLabExportTests: XCTestCase {
         XCTAssertNotNil(session.beginShare())
         session.finishShare(completed: true, error: nil)
         XCTAssertEqual(session.phase, .success(.share))
+    }
+
+    func testActivityDismissalDelegateFinishesOnlyOnceAndPreservesPreviewFile() async throws {
+        let session = ScienceLabExportSession(image: image(), title: "Dismissal")
+        await session.prepareForPreview()
+        defer { session.cancel() }
+        let file = try XCTUnwrap(session.beginShare())
+        var completions = 0
+        let delegate = ScienceLabActivityDismissalDelegate { completed, error in
+            completions += 1
+            session.finishShare(completed: completed, error: error)
+        }
+        // Exercise the actual UIKit delegate entry point; the host UI test
+        // separately proves a user's real sheet gesture dismisses the sheet.
+        let presentation = UIPresentationController(presentedViewController: UIViewController(), presenting: nil)
+        delegate.presentationControllerDidDismiss(presentation)
+        let usable = expectation(for: NSPredicate { _, _ in session.canAct }, evaluatedWith: nil)
+        await fulfillment(of: [usable], timeout: 3)
+        XCTAssertEqual(session.phase, .preview)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+        delegate.complete(completed: true, error: nil)
+        XCTAssertEqual(completions, 1)
+        XCTAssertEqual(session.phase, .preview)
     }
 
     func testPreparationFailureCanRetry() async {

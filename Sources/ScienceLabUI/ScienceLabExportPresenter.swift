@@ -21,13 +21,21 @@ public enum ScienceLabExportPresenter {
         let key = ObjectIdentifier(window)
         guard active[key]?.controller == nil else { return false }
         let session = ScienceLabExportSession(image: image, title: title, onSave: onSave)
-        let controller = ScienceLabExportHostingController(session: session)
+        let controller = makeController(session: session)
         controller.modalPresentationStyle = .formSheet
         controller.onClosed = { active[key] = nil }
         active[key] = Presentation(controller)
         source.present(controller, animated: true)
         controller.presentationController?.delegate = controller
         return true
+    }
+
+    /// This is also exercised by native UIKit tests without fabricating a
+    /// foreground scene or claiming a presentation that never occurred.
+    static func makeController(session: ScienceLabExportSession) -> ScienceLabExportHostingController {
+        let controller = ScienceLabExportHostingController(session: session)
+        controller.overrideUserInterfaceStyle = session.appearance == .dark ? .dark : .unspecified
+        return controller
     }
 
     private static func foregroundPresenter(preferred: UIViewController?) -> UIViewController? {
@@ -54,10 +62,12 @@ public enum ScienceLabExportPresenter {
 
 @available(iOS 15.0, macCatalyst 15.0, *)
 @MainActor
-private final class ScienceLabExportHostingController: UIHostingController<ScienceLabExportPreview>, UIAdaptivePresentationControllerDelegate {
+final class ScienceLabExportHostingController: UIHostingController<ScienceLabExportPreview>, UIAdaptivePresentationControllerDelegate {
     private let session: ScienceLabExportSession
     var onClosed: (() -> Void)?
     private var didClose = false
+    private var activityDelegate: ScienceLabActivityDismissalDelegate?
+    private var activityToken: UUID?
 
     init(session: ScienceLabExportSession) {
         self.session = session
@@ -84,6 +94,8 @@ private final class ScienceLabExportHostingController: UIHostingController<Scien
     private func cleanup() {
         guard !didClose else { return }
         didClose = true
+        activityToken = nil
+        activityDelegate = nil
         session.cancel()
         onClosed?()
         onClosed = nil
@@ -91,23 +103,65 @@ private final class ScienceLabExportHostingController: UIHostingController<Scien
 
     private func share() {
         guard presentedViewController == nil, let url = session.beginShare() else { return }
+        let token = UUID()
+        activityToken = token
+        let delegate = ScienceLabActivityDismissalDelegate { [weak self] completed, error in
+            guard let self, self.activityToken == token, !self.didClose else { return }
+            self.activityToken = nil
+            self.activityDelegate = nil
+            self.session.finishShare(completed: completed, error: error)
+        }
+        activityDelegate = delegate
         let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        controller.overrideUserInterfaceStyle = overrideUserInterfaceStyle
         if let popover = controller.popoverPresentationController {
             popover.sourceView = view
             let bounds = view.bounds
             popover.sourceRect = CGRect(x: max(0, min(bounds.width - 1, bounds.midX)),
                                         y: max(0, min(bounds.height - 1, bounds.height - 72)), width: 1, height: 1)
             popover.permittedArrowDirections = [.up, .down]
+            popover.delegate = delegate
         }
-        controller.completionWithItemsHandler = { [weak session] _, completed, _, error in
-            Task { @MainActor in session?.finishShare(completed: completed, error: error) }
+        controller.completionWithItemsHandler = { [weak delegate] _, completed, _, error in
+            Task { @MainActor in delegate?.complete(completed: completed, error: error) }
         }
         present(controller, animated: true)
+        controller.presentationController?.delegate = delegate
+    }
+}
+
+/// UIKit's interactive sheet/popover cancellation also ends the share attempt.
+/// This delegate belongs to the activity, never the enclosing preview: cancelling
+/// the system sheet must leave the preview and its prepared file available.
+@available(iOS 15.0, macCatalyst 15.0, *)
+@MainActor
+final class ScienceLabActivityDismissalDelegate: NSObject, UIAdaptivePresentationControllerDelegate, UIPopoverPresentationControllerDelegate {
+    private var completion: ((Bool, Error?) -> Void)?
+
+    init(completion: @escaping (Bool, Error?) -> Void) {
+        self.completion = completion
+    }
+
+    func complete(completed: Bool, error: Error?) {
+        guard let completion else { return }
+        self.completion = nil
+        completion(completed, error)
+    }
+
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { cancelled() }
+    func popoverPresentationControllerDidDismissPopover(_ popoverPresentationController: UIPopoverPresentationController) { cancelled() }
+
+    private func cancelled() {
+        // Let UIKit's activity result win when it arrives alongside dismissal.
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            self?.complete(completed: false, error: nil)
+        }
     }
 }
 
 @available(iOS 15.0, macCatalyst 15.0, *)
-private struct ScienceLabExportPreview: View {
+struct ScienceLabExportPreview: View {
     @ObservedObject var session: ScienceLabExportSession
     var onCancel: () -> Void = {}
     var onShare: () -> Void = {}
