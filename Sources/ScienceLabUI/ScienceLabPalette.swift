@@ -30,7 +30,7 @@ public struct ScienceLabPalette {
         self.positive = positive
         self.warning = warning
         #if canImport(UIKit)
-        self.canvas = canvas ?? Color(uiColor: .systemGroupedBackground)
+        self.canvas = canvas ?? Color(uiColor: .systemBackground)
         self.opaqueSurface = opaqueSurface ?? Color(uiColor: .secondarySystemGroupedBackground)
         #else
         self.canvas = canvas ?? Color(white: 0.12)

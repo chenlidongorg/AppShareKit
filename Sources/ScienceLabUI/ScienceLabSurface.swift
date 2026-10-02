@@ -42,20 +42,20 @@ struct ScienceLabSurface: ViewModifier {
 @available(iOS 15.0, macCatalyst 15.0, *)
 struct ScienceLabGlassGroup<Content: View>: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    private let content: () -> Content
+    private let content: Content
 
-    init(@ViewBuilder content: @escaping () -> Content) { self.content = content }
+    init(@ViewBuilder content: () -> Content) { self.content = content() }
 
     @ViewBuilder
     var body: some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, macCatalyst 26.0, *), !reduceTransparency {
-            GlassEffectContainer(spacing: 4) { content() }
+            GlassEffectContainer(spacing: 4) { content }
         } else {
-            content()
+            content
         }
         #else
-        content()
+        content
         #endif
     }
 }

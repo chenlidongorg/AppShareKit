@@ -123,8 +123,21 @@ public enum ScienceLabGeometry {
         case .expanded:
             return expandedPanelSize(in: container, accessibilitySize: accessibilitySize, inset: inset)
         case .maximized:
-            return bounds.size
+            let size = sanitized(container)
+            return CGSize(width: min(size.width >= size.height ? 600 : 360, bounds.width),
+                          height: min(size.height / 3, bounds.height))
         }
+    }
+
+    /// First expansion sits immediately above the two 48-point dock buttons.
+    /// Recalculate this semantic anchor after a resize until the user moves it.
+    public static func defaultMaximizedPosition(in container: CGSize) -> ScienceLabNormalizedPosition {
+        let bounds = availableBounds(in: container)
+        let panel = panelSize(in: container, mode: .maximized)
+        let origin = CGPoint(x: bounds.midX - panel.width / 2,
+                             y: max(bounds.minY, bounds.maxY - 48 - defaultInset - panel.height))
+        return position(after: CGSize(width: origin.x - bounds.minX, height: origin.y - bounds.minY),
+                        from: .init(x: 0, y: 0), panelSize: panel, in: container)
     }
 
     private static func expandedPanelSize(

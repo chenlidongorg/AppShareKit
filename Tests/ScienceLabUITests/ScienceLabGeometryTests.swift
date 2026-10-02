@@ -85,7 +85,7 @@ final class ScienceLabGeometryTests: XCTestCase {
         XCTAssertEqual(restored, .maximized)
         XCTAssertEqual(ScienceLabGeometry.displayMode(for: restored, in: stage), .maximized)
         let size = ScienceLabGeometry.panelSize(in: stage, mode: restored)
-        XCTAssertGreaterThan(size.height - ScienceLabGeometry.readoutHeaderHeight, 56)
+        XCTAssertGreaterThan(size.height - ScienceLabGeometry.readoutHeaderHeight, 0)
         XCTAssertEqual(ScienceLabGeometry.restoredMode(in: CGSize(width: 390, height: 580)), .expanded)
     }
 
@@ -138,11 +138,35 @@ final class ScienceLabGeometryTests: XCTestCase {
         XCTAssertEqual(preserved.y, saved.y, accuracy: 0.0001)
     }
 
-    func testMaximizedPanelIsExactlyInsideStageInsets() {
+    func testMaximizedPanelUsesCompactWindowThirdInsteadOfFillingStage() {
         let stage = CGSize(width: 390, height: 580)
         let panel = ScienceLabGeometry.panelSize(in: stage, mode: .maximized)
         let frame = ScienceLabGeometry.frame(at: .init(x: 0.37, y: 0.82), panelSize: panel, in: stage)
-        XCTAssertEqual(frame, ScienceLabGeometry.availableBounds(in: stage))
+        XCTAssertTrue(ScienceLabGeometry.availableBounds(in: stage).contains(frame))
+        XCTAssertEqual(panel.width, 360)
+        XCTAssertEqual(panel.height, stage.height / 3, accuracy: 0.001)
+    }
+
+    func testWideMaximizedPanelHasSixHundredPointWidthLimit() {
+        let stage = CGSize(width: 1366, height: 768)
+        let panel = ScienceLabGeometry.panelSize(in: stage, mode: .maximized)
+        XCTAssertEqual(panel.width, 600)
+        XCTAssertEqual(panel.height, 256)
+    }
+
+    func testDefaultMaximizedPanelSitsAboveDockAndCanStillMove() {
+        for stage in [CGSize(width: 390, height: 778), CGSize(width: 844, height: 350)] {
+            let panel = ScienceLabGeometry.panelSize(in: stage, mode: .maximized)
+            let position = ScienceLabGeometry.defaultMaximizedPosition(in: stage)
+            let original = ScienceLabGeometry.frame(at: position, panelSize: panel, in: stage)
+            XCTAssertEqual(original.midX, stage.width / 2, accuracy: 0.001)
+            XCTAssertEqual(original.maxY, stage.height - 10 - 48 - 10, accuracy: 0.001)
+            let moved = ScienceLabGeometry.position(after: CGSize(width: 30, height: -60), from: position,
+                                                   panelSize: panel, in: stage)
+            let movedFrame = ScienceLabGeometry.frame(at: moved, panelSize: panel, in: stage)
+            XCTAssertNotEqual(movedFrame.origin, original.origin)
+            XCTAssertTrue(ScienceLabGeometry.availableBounds(in: stage).contains(movedFrame))
+        }
     }
 
     func testEveryModeFitsTinyAndCompactStages() {
@@ -198,12 +222,13 @@ final class ScienceLabGeometryTests: XCTestCase {
         let stage = CGSize(width: 390, height: 580)
         let maximized = ScienceLabGeometry.panelSize(in: stage, mode: .maximized)
         let preserved = ScienceLabGeometry.position(
-            after: CGSize(width: 400, height: -400),
+            after: .zero,
             from: position,
             panelSize: maximized,
             in: stage
         )
-        XCTAssertEqual(preserved, position)
+        XCTAssertEqual(preserved.x, position.x, accuracy: 0.0001)
+        XCTAssertEqual(preserved.y, position.y, accuracy: 0.0001)
     }
 
     func testMinimizeRestoreKeepsNormalizedAnchor() {

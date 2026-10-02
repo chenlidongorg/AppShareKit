@@ -4,13 +4,16 @@ import SwiftUI
 @available(iOS 15.0, macCatalyst 15.0, *)
 struct ScienceLabReadoutPanel<Readouts: View>: View {
     let stageSize: CGSize
+    let isVisible: Bool
     let labels: ScienceLabLabels
+    let initialHeaderOffset: CGFloat
     private let readouts: () -> Readouts
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var mode: ScienceLabReadoutMode
-    @State private var position = ScienceLabNormalizedPosition.topTrailing
+    @State private var minimizedPosition = ScienceLabNormalizedPosition.topTrailing
+    @State private var maximizedPosition: ScienceLabNormalizedPosition?
     @State private var hasPlacedInitialHeader = false
     @GestureState private var drag: ReadoutDrag? = nil
 
@@ -27,14 +30,29 @@ struct ScienceLabReadoutPanel<Readouts: View>: View {
 
     init(
         stageSize: CGSize,
+        isVisible: Bool = true,
         labels: ScienceLabLabels,
         initialMode: ScienceLabReadoutMode,
+        initialHeaderOffset: CGFloat = 54,
         @ViewBuilder readouts: @escaping () -> Readouts
     ) {
         self.stageSize = stageSize
+        self.isVisible = isVisible
         self.labels = labels
+        self.initialHeaderOffset = initialHeaderOffset
         self._mode = State(initialValue: initialMode)
         self.readouts = readouts
+    }
+
+    private var position: ScienceLabNormalizedPosition {
+        displayedMode == .maximized
+            ? maximizedPosition ?? ScienceLabGeometry.defaultMaximizedPosition(in: stageSize)
+            : minimizedPosition
+    }
+
+    private func setPosition(_ position: ScienceLabNormalizedPosition) {
+        if displayedMode == .maximized { maximizedPosition = position }
+        else { minimizedPosition = position }
     }
 
     private var panelSize: CGSize {
@@ -47,10 +65,6 @@ struct ScienceLabReadoutPanel<Readouts: View>: View {
 
     private var displayedMode: ScienceLabReadoutMode {
         ScienceLabGeometry.displayMode(for: mode, in: stageSize, accessibilitySize: dynamicTypeSize.isAccessibilitySize)
-    }
-
-    private var restoredMode: ScienceLabReadoutMode {
-        ScienceLabGeometry.restoredMode(in: stageSize, accessibilitySize: dynamicTypeSize.isAccessibilitySize)
     }
 
     private var dragGeometry: ScienceLabDragGeometry {
@@ -73,34 +87,42 @@ struct ScienceLabReadoutPanel<Readouts: View>: View {
 
     var body: some View {
         let frame = panelFrame
-        VStack(spacing: 0) {
-            header
-                .frame(height: min(ScienceLabGeometry.readoutHeaderHeight, frame.height))
-            if displayedMode != .minimized && frame.height > ScienceLabGeometry.readoutHeaderHeight {
-                Divider()
-                ScrollView(.vertical, showsIndicators: true) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        readouts()
+        // Keep presentation state on this stable owner while removing hidden
+        // glass from rendering, hit testing and the accessibility hierarchy.
+        ZStack {
+            if isVisible {
+                VStack(spacing: 0) {
+                    header
+                        .frame(height: min(ScienceLabGeometry.readoutHeaderHeight, frame.height))
+                    if displayedMode != .minimized && frame.height > ScienceLabGeometry.readoutHeaderHeight {
+                        Divider()
+                        ScrollView(.vertical, showsIndicators: true) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                readouts()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("scienceLab.readouts.content")
                     }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .accessibilityIdentifier("scienceLab.readouts.content")
+                .frame(width: frame.width, height: frame.height)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .modifier(ScienceLabSurface(cornerRadius: 18))
+                .shadow(color: .black.opacity(0.10), radius: 10, y: 3)
+                .position(x: frame.midX, y: frame.midY)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("scienceLab.readouts")
             }
         }
-        .frame(width: frame.width, height: frame.height)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .modifier(ScienceLabSurface(cornerRadius: 18))
-        .shadow(color: .black.opacity(0.10), radius: 10, y: 3)
-        .position(x: frame.midX, y: frame.midY)
-        .accessibilityIdentifier("scienceLab.readouts")
         .onAppear {
             guard !hasPlacedInitialHeader else { return }
             hasPlacedInitialHeader = true
             // Start below the overlaid top controls; subsequent moves belong
             // to the user and remain normalized through changes in size.
-            position = ScienceLabGeometry.position(after: CGSize(width: 0, height: 54),
+            minimizedPosition = ScienceLabGeometry.position(after: CGSize(width: 0, height: initialHeaderOffset),
                                                    from: .topTrailing, panelSize: panelSize, in: stageSize)
         }
     }
@@ -127,12 +149,12 @@ struct ScienceLabReadoutPanel<Readouts: View>: View {
                         state = ReadoutDrag(geometry: state?.geometry ?? dragGeometry, translation: value.translation)
                     }
                     .onEnded { value in
-                        position = ScienceLabGeometry.position(
+                        setPosition(ScienceLabGeometry.position(
                             after: value.translation,
                             from: position,
                             panelSize: panelSize,
                             in: stageSize
-                        )
+                        ))
                     }
             )
             // Replacing the handle cancels its active gesture. GestureState
@@ -144,11 +166,8 @@ struct ScienceLabReadoutPanel<Readouts: View>: View {
             .accessibilityHint(Text(labels.moveHint))
             .accessibilityAction(named: Text(labels.resetPosition)) { resetPosition() }
             .accessibilityAction(named: Text(labels.centerPosition)) { centerPosition() }
-            .accessibilityAction(named: Text(displayedMode == .minimized ? labels.restore : labels.minimize)) {
-                changeMode(to: displayedMode == .minimized ? restoredMode : .minimized)
-            }
-            .accessibilityAction(named: Text(displayedMode == .maximized ? labels.restore : labels.maximize)) {
-                changeMode(to: displayedMode == .maximized ? .expanded : .maximized)
+            .accessibilityAction(named: Text(displayedMode == .maximized ? labels.minimize : labels.maximize)) {
+                changeMode(to: displayedMode == .maximized ? .minimized : .maximized)
             }
             .accessibilityIdentifier("scienceLab.readouts.dragHandle")
 
@@ -179,12 +198,18 @@ struct ScienceLabReadoutPanel<Readouts: View>: View {
     }
 
     private func resetPosition() {
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { position = .topTrailing }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+            if displayedMode == .maximized { maximizedPosition = nil }
+            else {
+                minimizedPosition = ScienceLabGeometry.position(after: CGSize(width: 0, height: initialHeaderOffset),
+                                                               from: .topTrailing, panelSize: panelSize, in: stageSize)
+            }
+        }
     }
 
     private func centerPosition() {
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
-            position = ScienceLabNormalizedPosition(x: 0.5, y: 0.5)
+            setPosition(ScienceLabNormalizedPosition(x: 0.5, y: 0.5))
         }
     }
 }

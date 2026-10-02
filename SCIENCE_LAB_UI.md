@@ -1,5 +1,13 @@
 # ScienceLabUI
 
+The user-approved app-wide contract is maintained in the host repository at `Documentation/APP_CONSTITUTION.md` (2026-10-02). It supersedes historical examples below. Every existing and new tool follows the same layout and interactions; broad rollout waits for the user's first-three-tool physical-device acceptance.
+
+Ordinary stages use system background and primary/secondary text in light and dark appearances. Only a documented scientific need, such as a dark-field interference experiment, selects `appearance: .dark`; controls, text and export must follow that same appearance. Scientific object/series colors retain their verified meaning and schematic disclosures.
+
+The title/subtitle have no card, background or border. Only the subdued title appears initially; tapping it shows/hides the still more subdued subtitle. Focus hides both. Minimized readouts contain only the header. Maximized width is capped at 600 points in wide windows or 360 in narrow windows; height is one third of the unobscured current window. Its default anchor is immediately above the dock. The entire header except its toggle remains draggable in both modes, and each mode retains its own moved anchor.
+
+The header's accessibility action uses the same minimized/maximized transition as its single state button. The public legacy expanded mode remains source compatible, but the normal toggle and accessibility action do not enter that third presentation.
+
 Dependency-free, generic SwiftUI presentation shell for the ScienceandExperiment tool family. Scientific models, controllers, captures, renderers, gestures and original data colors remain owned by the calling module.
 
 ## Integration
@@ -23,7 +31,8 @@ Consumer targets add `.product(name: "ScienceLabUI", package: "AppShareKit")`, t
 ```swift
 ScienceLabShell(
     title: LocalizedInfo.Title,
-    showsTitle: false, // An outer app header already owns this title.
+    subtitle: LocalizedInfo.Subtitle,
+    showsTitle: true, // The shared shell owns the title below its controls.
     isRunning: viewModel.isRunning,
     isCaptureConfirmed: isCaptureConfirmed,
     onToggleRun: { viewModel.toggleRun() },
@@ -54,9 +63,11 @@ Stage receives its actual proposed `CGSize` every layout pass. Do not retain `UI
 
 The shell has four generic view parameters (`Stage`, `Controls`, `Readouts`, `Knowledge`) and no `AnyView`. Required values are `title`, `isRunning`, the four callbacks and the four builders shown above. Optional values are:
 
-- `showsTitle: Bool = true`: compact HUD title; use false for existing outer titles / hidden header style
+- `subtitle: String? = nil`: tap the title to reveal/hide this text; initially hidden
+- `showsTitle: Bool = true`: subdued, unframed title below the top controls; omit duplicate outer titles
 - `isCaptureConfirmed: Bool = false`: confirmation in the secondary menu icon and capture item
 - `primaryAction: ScienceLabPrimaryAction = .simulation`
+- `appearance: ScienceLabAppearance = .system`: `.dark` only for documented dark-field science
 - `palette: ScienceLabPalette = .standard`
 - `labels: ScienceLabLabels = .init()`
 - `initialReadoutMode: ScienceLabReadoutMode = .minimized`

@@ -1,16 +1,25 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
+/// Dark-field experiments can opt into a consistent dark presentation.
+/// Ordinary tools inherit the system appearance.
+public enum ScienceLabAppearance {
+    case system
+    case dark
+}
+
 /// A stage-first layout with two centered primary controls and a movable
 /// readout overlay. All science, capture, and controller state stays with the
 /// host. There is deliberately no scroll container around the stage.
 @available(iOS 15.0, macCatalyst 15.0, *)
 public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowledge: View>: View {
     private let title: String
+    private let subtitle: String?
     private let showsTitle: Bool
     private let isRunning: Bool
     private let isCaptureConfirmed: Bool
     private let primaryAction: ScienceLabPrimaryAction
+    private let appearance: ScienceLabAppearance
     private let palette: ScienceLabPalette
     private let labels: ScienceLabLabels
     private let initialReadoutMode: ScienceLabReadoutMode
@@ -25,6 +34,7 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
     @Environment(\.scienceLabNavigationAction) private var navigationAction
     @State private var activeSheet: Sheet?
     @State private var isFocused = false
+    @State private var isSubtitleVisible = false
 
     private enum Sheet: String, Identifiable {
         case commonParameters, knowledge
@@ -33,10 +43,12 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
 
     public init(
         title: String,
+        subtitle: String? = nil,
         showsTitle: Bool = true,
         isRunning: Bool,
         isCaptureConfirmed: Bool = false,
         primaryAction: ScienceLabPrimaryAction = .simulation,
+        appearance: ScienceLabAppearance = .system,
         palette: ScienceLabPalette = .standard,
         labels: ScienceLabLabels = .init(),
         initialReadoutMode: ScienceLabReadoutMode = .minimized,
@@ -50,10 +62,12 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
         @ViewBuilder knowledge: @escaping () -> Knowledge
     ) {
         self.title = title
+        self.subtitle = subtitle
         self.showsTitle = showsTitle
         self.isRunning = isRunning
         self.isCaptureConfirmed = isCaptureConfirmed
         self.primaryAction = primaryAction
+        self.appearance = appearance
         self.palette = palette
         self.labels = labels
         self.initialReadoutMode = initialReadoutMode
@@ -68,49 +82,57 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
     }
 
     public var body: some View {
-        GeometryReader { geometry in
+        // Read local state in the owning body, before the escaping geometry
+        // builder. Every overlay must receive the same focus snapshot.
+        let focused = isFocused
+        let subtitleVisible = isSubtitleVisible
+        return GeometryReader { geometry in
+            let safeInsets = geometry.safeAreaInsets
+            let stageSize = CGSize(width: geometry.size.width + safeInsets.leading + safeInsets.trailing,
+                                   height: geometry.size.height + safeInsets.top + safeInsets.bottom)
             ScienceLabGlassGroup {
                 ZStack(alignment: .topLeading) {
-                    stage(ScienceLabGeometry.sanitized(geometry.size))
-                        .frame(width: geometry.size.width, height: geometry.size.height)
+                    // Render through system safe areas. Controls and movable data
+                    // continue to use the unobscured window geometry below.
+                    ZStack {
+                        stage(ScienceLabGeometry.sanitized(stageSize))
+                    }
+                        .frame(width: stageSize.width, height: stageSize.height)
+                        .clipped()
+                        .offset(x: -safeInsets.leading, y: -safeInsets.top)
+                        .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("scienceLab.stage")
                         .zIndex(0)
 
                     VStack(spacing: 0) {
-                        header
-                            .opacity(isFocused ? 0 : 1)
-                            .allowsHitTesting(!isFocused)
-                            .accessibilityHidden(isFocused)
+                        header(focused: focused)
+                        if showsTitle && !focused {
+                            heading(subtitleVisible: subtitleVisible)
+                                .padding(.top, 8)
+                        }
                         Spacer(minLength: 0)
                         dock
                     }
                     .padding(10)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
                     .zIndex(1)
                     ScienceLabReadoutPanel(
                         stageSize: geometry.size,
+                        isVisible: !focused,
                         labels: labels,
                         initialMode: initialReadoutMode,
+                        initialHeaderOffset: showsTitle ? 124 : 54,
                         readouts: readouts
                     )
-                    .opacity(isFocused ? 0 : 1)
-                    .allowsHitTesting(!isFocused)
-                    .accessibilityHidden(isFocused)
                     .zIndex(2)
 
-                    iconButton(label: isFocused ? labels.exitFocus : labels.focus,
-                               icon: isFocused ? "arrow.down.right.and.arrow.up.left" : "viewfinder",
-                               identifier: "scienceLab.focus") {
-                        isFocused.toggle()
-                    }
-                    .padding(10)
-                    .zIndex(1)
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .clipped()
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
             }
         }
         .background(palette.canvas)
         .environment(\.scienceLabPalette, palette)
+        .preferredColorScheme(appearance == .dark ? .dark : nil)
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .commonParameters:
@@ -127,55 +149,87 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 8) {
-            // Reserve only an overlay slot for the always-available focus control.
-            Color.clear.frame(width: 44, height: 44)
-            if let navigationAction {
-                iconButton(label: navigationAction.isBack ? labels.back : labels.close,
-                           icon: navigationAction.isBack ? "chevron.left" : "xmark",
+    private func header(focused: Bool) -> some View {
+        return HStack(spacing: 8) {
+            if !focused, let navigationAction {
+                iconButton(label: labels.back, icon: "chevron.left",
                            identifier: "scienceLab.navigation.dismiss", action: navigationAction.onDismiss)
             }
-            if showsTitle {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
+            iconButton(label: focused ? labels.exitFocus : labels.focus,
+                       icon: focused ? "arrow.down.right.and.arrow.up.left" : "viewfinder",
+                       identifier: "scienceLab.focus") {
+                isFocused.toggle()
             }
             Spacer(minLength: 0)
-            iconButton(label: labels.knowledge, icon: "info.circle", identifier: "scienceLab.knowledge") {
-                activeSheet = .knowledge
-            }
-            iconButton(label: labels.advancedParameters, icon: "slider.horizontal.3", identifier: "scienceLab.advancedParameters", action: onParameters)
-            Menu {
-                Button(action: onCapture) {
-                    Label(isCaptureConfirmed ? labels.captureConfirmed : labels.capture,
-                          systemImage: isCaptureConfirmed ? "checkmark" : "camera")
+            if !focused {
+              HStack(spacing: 8) {
+                iconButton(label: labels.knowledge, icon: "info.circle", identifier: "scienceLab.knowledge") {
+                    activeSheet = .knowledge
                 }
-                .accessibilityIdentifier("scienceLab.capture")
-                Button(action: onReset) {
-                    Label(labels.reset, systemImage: "arrow.counterclockwise")
+                iconButton(label: labels.advancedParameters, icon: "slider.horizontal.3", identifier: "scienceLab.advancedParameters", action: onParameters)
+                Menu {
+                    Button(action: onCapture) {
+                        Label(isCaptureConfirmed ? labels.captureConfirmed : labels.capture,
+                              systemImage: isCaptureConfirmed ? "checkmark" : "camera")
+                    }
+                    .accessibilityIdentifier("scienceLab.capture")
+                    Button(action: onReset) {
+                        Label(labels.reset, systemImage: "arrow.counterclockwise")
+                    }
+                    .accessibilityIdentifier("scienceLab.reset")
+                } label: {
+                    Image(systemName: isCaptureConfirmed ? "checkmark.circle" : "ellipsis")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(isCaptureConfirmed ? palette.positive : Color.primary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                        .modifier(ScienceLabSurface(cornerRadius: 14, interactive: true))
                 }
-                .accessibilityIdentifier("scienceLab.reset")
-            } label: {
-                Image(systemName: isCaptureConfirmed ? "checkmark.circle" : "ellipsis")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(isCaptureConfirmed ? palette.positive : Color.primary)
-                    .frame(width: 44, height: 44)
-                    .modifier(ScienceLabSurface(cornerRadius: 14, interactive: true))
+                .accessibilityLabel(Text(labels.moreActions))
+                .accessibilityValue(Text(isCaptureConfirmed ? labels.captureConfirmed : ""))
+                .accessibilityIdentifier("scienceLab.moreActions")
+              }
             }
-            .accessibilityLabel(Text(labels.moreActions))
-            .accessibilityValue(Text(isCaptureConfirmed ? labels.captureConfirmed : ""))
-            .accessibilityIdentifier("scienceLab.moreActions")
         }
+    }
+
+    private func heading(subtitleVisible: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Button {
+                isSubtitleVisible.toggle()
+            } label: {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.primary.opacity(0.60))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .accessibilityIdentifier("scienceLab.title")
+            }
+                .buttonStyle(.plain)
+                .disabled(subtitle?.isEmpty != false)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityValue(Text(subtitleVisible ? labels.expanded : labels.minimized))
+                .accessibilityIdentifier("scienceLab.headingToggle")
+            if subtitleVisible, let subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(Color.primary.opacity(0.55))
+                    .lineLimit(2)
+                    .accessibilityIdentifier("scienceLab.subtitle")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("scienceLab.heading")
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var dock: some View {
         HStack(spacing: 12) {
             Button(action: onToggleRun) {
                 dockIcon(primaryAction.systemImage ?? (isRunning ? "pause.fill" : "play.fill"))
-                .foregroundStyle(palette.accent)
-                .modifier(ScienceLabSurface(cornerRadius: 20, interactive: true, tint: palette.accent.opacity(0.12)))
+                .foregroundStyle(Color.primary)
+                .modifier(ScienceLabSurface(cornerRadius: 20, interactive: true))
             }
             .buttonStyle(.plain)
             .disabled(!primaryAction.isEnabled)
@@ -206,6 +260,7 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
             Image(systemName: icon)
                 .font(.system(size: 18, weight: .semibold))
                 .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
                 .modifier(ScienceLabSurface(cornerRadius: 14, interactive: true))
         }
         .buttonStyle(.plain)

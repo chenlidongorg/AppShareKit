@@ -21,6 +21,7 @@ struct ScienceLabSheet<Content: View>: View {
     var body: some View {
         sheetContent
             .modifier(ScienceLabSheetSizing(prefersLarge: prefersLarge))
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier(identifier)
     }
 
