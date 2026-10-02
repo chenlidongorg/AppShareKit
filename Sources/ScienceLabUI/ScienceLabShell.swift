@@ -103,7 +103,7 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
                         isFocused.toggle()
                     }
                     .padding(10)
-                    .zIndex(3)
+                    .zIndex(1)
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .clipped()
