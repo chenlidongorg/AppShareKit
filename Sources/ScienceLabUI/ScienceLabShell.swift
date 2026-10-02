@@ -35,6 +35,8 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
     @State private var activeSheet: Sheet?
     @State private var isFocused = false
     @State private var isSubtitleVisible = false
+    @State private var viewport = ScienceLabViewportState(size: .zero)
+    @State private var viewportResetGeneration: UInt = 0
 
     private enum Sheet: String, Identifiable {
         case commonParameters, knowledge
@@ -86,6 +88,7 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
         // builder. Every overlay must receive the same focus snapshot.
         let focused = isFocused
         let subtitleVisible = isSubtitleVisible
+        let cameraValue = cameraAccessibilityValue
         return GeometryReader { geometry in
             let safeInsets = geometry.safeAreaInsets
             let stageSize = CGSize(width: geometry.size.width + safeInsets.leading + safeInsets.trailing,
@@ -95,13 +98,14 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
                     // Render through system safe areas. Controls and movable data
                     // continue to use the unobscured window geometry below.
                     ZStack {
-                        stage(ScienceLabGeometry.sanitized(stageSize))
+                        viewportStage(size: ScienceLabGeometry.sanitized(stageSize))
                     }
                         .frame(width: stageSize.width, height: stageSize.height)
                         .clipped()
                         .offset(x: -safeInsets.leading, y: -safeInsets.top)
                         .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("scienceLab.stage")
+                        .accessibilityValue(Text(cameraValue))
                         .zIndex(0)
 
                     VStack(spacing: 0) {
@@ -149,6 +153,28 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
         }
     }
 
+    private var cameraAccessibilityValue: String {
+        #if DEBUG
+        return viewport.accessibilityValue
+        #else
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .percent
+        formatter.maximumFractionDigits = 0
+        return formatter.string(from: NSNumber(value: Double(viewport.scale))) ?? ""
+        #endif
+    }
+
+    @ViewBuilder
+    private func viewportStage(size: CGSize) -> some View {
+        #if canImport(UIKit)
+        ScienceLabStageViewport(size: size, resetGeneration: viewportResetGeneration,
+                                viewport: $viewport,
+                                content: stage(size))
+        #else
+        stage(size)
+        #endif
+    }
+
     private func header(focused: Bool) -> some View {
         return HStack(spacing: 8) {
             if !focused, let navigationAction {
@@ -173,7 +199,11 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
                               systemImage: isCaptureConfirmed ? "checkmark" : "camera")
                     }
                     .accessibilityIdentifier("scienceLab.capture")
-                    Button(action: onReset) {
+                    Button {
+                        viewportResetGeneration &+= 1
+                        viewport = ScienceLabViewportState(size: viewport.size)
+                        onReset()
+                    } label: {
                         Label(labels.reset, systemImage: "arrow.counterclockwise")
                     }
                     .accessibilityIdentifier("scienceLab.reset")
