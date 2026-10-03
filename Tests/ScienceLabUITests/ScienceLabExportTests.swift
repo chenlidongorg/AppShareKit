@@ -62,7 +62,7 @@ final class ScienceLabExportTests: XCTestCase {
         let session = ScienceLabExportSession(image: source, title: "Dark detector", onSave: nil)
         defer { session.cancel() }
         let controller = ScienceLabExportPresenter.makeController(session: session)
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let window = scienceLabTestWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = controller
         window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil }
@@ -83,7 +83,7 @@ final class ScienceLabExportTests: XCTestCase {
         let controller = ScienceLabExportPresenter.makeController(session: session)
         let parent = UIViewController()
         parent.overrideUserInterfaceStyle = .light
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let window = scienceLabTestWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = parent
         window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil }

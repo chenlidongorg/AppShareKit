@@ -38,6 +38,7 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
     @State private var isSubtitleVisible = false
     @State private var viewport = ScienceLabViewportState(size: .zero)
     @State private var viewportResetGeneration: UInt = 0
+    @State private var nativeControlInsets = EdgeInsets()
 
     private enum Sheet: String, Identifiable {
         case commonParameters, knowledge
@@ -94,6 +95,8 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
         let cameraValue = cameraAccessibilityValue
         return GeometryReader { geometry in
             let safeInsets = geometry.safeAreaInsets
+            let controlSize = CGSize(width: max(0, geometry.size.width - nativeControlInsets.leading - nativeControlInsets.trailing),
+                                     height: max(0, geometry.size.height - nativeControlInsets.top - nativeControlInsets.bottom))
             let stageSize = CGSize(width: geometry.size.width + safeInsets.leading + safeInsets.trailing,
                                    height: geometry.size.height + safeInsets.top + safeInsets.bottom)
             ZStack(alignment: .topLeading) {
@@ -125,20 +128,27 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
                     }
                 }
                 .padding(10)
-                .frame(width: geometry.size.width, height: geometry.size.height)
+                .frame(width: controlSize.width, height: controlSize.height)
+                .offset(x: nativeControlInsets.leading, y: nativeControlInsets.top)
                 .zIndex(1)
                 ScienceLabReadoutPanel(
-                    stageSize: geometry.size,
+                    stageSize: controlSize,
                     isVisible: !focused,
                     labels: labels,
                     initialMode: initialReadoutMode,
                     initialHeaderOffset: showsTitle ? 124 : 54,
                     readouts: readouts
                 )
+                .offset(x: nativeControlInsets.leading, y: nativeControlInsets.top)
                 .zIndex(2)
 
             }
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+            #if canImport(UIKit)
+            .background(ScienceLabNativeSafeArea { insets in
+                if nativeControlInsets != insets { nativeControlInsets = insets }
+            })
+            #endif
         }
         .background(palette.canvas)
         .environment(\.scienceLabPalette, palette)

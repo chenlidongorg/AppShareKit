@@ -194,6 +194,10 @@ final class StageController<Content: View>: UIViewController, UIGestureRecognize
         // the render transaction has returned. Scientific cancellation is real,
         // but it must not publish during destruction of the parent ViewGraph.
         DispatchQueue.main.async { [self] in
+            // Newer UIKit may keep the representable's native wrapper attached
+            // until after this turn. Detach our viewport before publishing its
+            // cancellation, while retaining the scientific child for rollback.
+            if isViewLoaded { view.removeFromSuperview() }
             interaction.invalidateObjectInteraction()
             camera.cancel()
             receivedTouches.removeAll()

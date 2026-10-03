@@ -219,10 +219,13 @@ final class ScienceLabStageInteractionTests: XCTestCase {
         }
         let controller = StageController(content: content, environment: environment, interaction: interaction,
                                          viewport: ScienceLabViewportState(size: size), onChange: { _ in })
-        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
-        window.rootViewController = controller
+        let window = scienceLabTestWindow(frame: CGRect(origin: .zero, size: size))
+        let appearance = ScienceLabTestAppearanceController(content: controller)
+        window.rootViewController = appearance
         window.makeKeyAndVisible()
         controller.view.layoutIfNeeded()
+        let nativeAppearance = expectation(for: NSPredicate { _, _ in appearance.nativeDidAppear }, evaluatedWith: nil)
+        await fulfillment(of: [nativeAppearance], timeout: 3)
         await fulfillment(of: [reported], timeout: 3)
         XCTAssertEqual(result?.size, size)
         XCTAssertEqual(result?.colorScheme, .dark)
@@ -230,6 +233,7 @@ final class ScienceLabStageInteractionTests: XCTestCase {
         XCTAssertEqual(result?.dynamicTypeSize, .accessibility2)
         XCTAssertTrue(result?.interaction === interaction)
         window.isHidden = true
+        window.rootViewController = nil
     }
 
     @MainActor
@@ -241,7 +245,7 @@ final class ScienceLabStageInteractionTests: XCTestCase {
         var parent: UIHostingController<LifecycleHost>? = UIHostingController(rootView: LifecycleHost(control: control) { interaction in
             if stageInteraction == nil { stageInteraction = interaction; appeared.fulfill() }
         })
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let window = scienceLabTestWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = parent
         window.makeKeyAndVisible()
         await fulfillment(of: [appeared], timeout: 3)
@@ -316,7 +320,7 @@ final class ScienceLabStageInteractionTests: XCTestCase {
             contexts.append(interaction)
             if contexts.count == 1 { firstAppeared.fulfill() } else { newAppeared.fulfill() }
         })
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let window = scienceLabTestWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = parent
         window.makeKeyAndVisible()
         await fulfillment(of: [firstAppeared], timeout: 3)

@@ -168,44 +168,32 @@ struct ScienceLabExportPreview: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Image(uiImage: session.previewImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity)
-                        .background(Color(uiColor: .secondarySystemGroupedBackground))
-                        .accessibilityLabel(Text(session.title))
-                        .accessibilityIdentifier("scienceLab.export.image")
-                    if let file = session.file {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(file.url.lastPathComponent).font(.headline)
-                            Text("PNG · \(file.pixelWidth) × \(file.pixelHeight) px · \(ByteCountFormatter.string(fromByteCount: Int64(file.byteCount), countStyle: .file))")
-                                .font(.caption).foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Image(uiImage: session.previewImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                            .background(Color(uiColor: .secondarySystemGroupedBackground))
+                            .accessibilityLabel(Text(session.title))
+                            .accessibilityIdentifier("scienceLab.export.image")
+                        if let file = session.file {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(file.url.lastPathComponent).font(.headline)
+                                Text("PNG · \(file.pixelWidth) × \(file.pixelHeight) px · \(ByteCountFormatter.string(fromByteCount: Int64(file.byteCount), countStyle: .file))")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            .accessibilityIdentifier("scienceLab.export.file")
                         }
-                        .accessibilityIdentifier("scienceLab.export.file")
                     }
-                    status
-                    VStack(spacing: 12) {
-                        Button(action: onShare) {
-                            Label(label("export.share", "Share PNG"), systemImage: "square.and.arrow.up")
-                                .frame(maxWidth: .infinity, minHeight: 44)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!session.canAct)
-                        .accessibilityIdentifier("scienceLab.export.share")
-                        Button { session.save() } label: {
-                            Label(label("export.save", "Save image"), systemImage: "square.and.arrow.down")
-                                .frame(maxWidth: .infinity, minHeight: 44)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!session.canSave)
-                        .accessibilityIdentifier("scienceLab.export.save")
-                    }
+                    .frame(maxWidth: 720)
+                    .frame(maxWidth: .infinity)
+                    .padding(20)
                 }
-                .frame(maxWidth: 720)
-                .frame(maxWidth: .infinity)
-                .padding(20)
+                .accessibilityIdentifier("scienceLab.export.report")
+                Divider()
+                actionDock
             }
             .navigationTitle(label("export.preview", "Export preview"))
             .navigationBarTitleDisplayMode(.inline)
@@ -219,6 +207,34 @@ struct ScienceLabExportPreview: View {
         .navigationViewStyle(.stack)
         .task { await session.prepareForPreview() }
         .accessibilityIdentifier("scienceLab.export.preview")
+    }
+
+    // The scientific report can contain thousands of rows. Its content scrolls
+    // independently; export actions and operation/retry feedback stay reachable.
+    private var actionDock: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            status
+            Button(action: onShare) {
+                Label(label("export.share", "Share PNG"), systemImage: "square.and.arrow.up")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!session.canAct)
+            .accessibilityIdentifier("scienceLab.export.share")
+            Button { session.save() } label: {
+                Label(label("export.save", "Save image"), systemImage: "square.and.arrow.down")
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!session.canSave)
+            .accessibilityIdentifier("scienceLab.export.save")
+        }
+        .frame(maxWidth: 720)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(Color(uiColor: .systemBackground))
+        .accessibilityIdentifier("scienceLab.export.actions")
     }
 
     @ViewBuilder private var status: some View {

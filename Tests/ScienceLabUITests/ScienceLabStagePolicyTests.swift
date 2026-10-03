@@ -13,9 +13,9 @@ final class ScienceLabStagePolicyTests: XCTestCase {
         let made = expectation(description: "default stage actually created")
         let record = NativeWorldRecord()
         record.onMake = { _ in made.fulfill() }
-        let parent = UIHostingController(rootView: PolicyHost(control: PolicyControl(), record: record,
+        let parent = ScienceLabTestHostingController(rootView: PolicyHost(control: PolicyControl(), record: record,
                                                              usesDefaultPolicy: true))
-        let window = present(parent, size: CGSize(width: 390, height: 844))
+        let window = await present(parent, size: CGSize(width: 390, height: 844))
         defer { window.isHidden = true; window.rootViewController = nil }
         await fulfillment(of: [made], timeout: 3)
         let controller = try XCTUnwrap(findObservationController(in: parent))
@@ -32,8 +32,8 @@ final class ScienceLabStagePolicyTests: XCTestCase {
         let control = PolicyControl(policy: .toolManaged)
         let record = NativeWorldRecord()
         record.onMake = { _ in made.fulfill() }
-        let parent = UIHostingController(rootView: PolicyHost(control: control, record: record))
-        let window = present(parent, size: CGSize(width: 390, height: 844))
+        let parent = ScienceLabTestHostingController(rootView: PolicyHost(control: control, record: record))
+        let window = await present(parent, size: CGSize(width: 390, height: 844))
         defer { window.isHidden = true; window.rootViewController = nil }
         await fulfillment(of: [made], timeout: 3)
         let view = try XCTUnwrap(record.latestView)
@@ -95,8 +95,8 @@ final class ScienceLabStagePolicyTests: XCTestCase {
         record.onMake = { _ in
             if record.makeCount == 1 { firstMade.fulfill() } else { nativeMade.fulfill() }
         }
-        let parent = UIHostingController(rootView: PolicyHost(control: control, record: record))
-        let window = present(parent, size: CGSize(width: 390, height: 844))
+        let parent = ScienceLabTestHostingController(rootView: PolicyHost(control: control, record: record))
+        let window = await present(parent, size: CGSize(width: 390, height: 844))
         defer { window.isHidden = true; window.rootViewController = nil }
         await fulfillment(of: [firstMade], timeout: 3)
         var controller: StageController<NativeWorldStage>? = try XCTUnwrap(findObservationController(in: parent))
@@ -128,11 +128,15 @@ final class ScienceLabStagePolicyTests: XCTestCase {
     }
 
     @MainActor
-    private func present(_ parent: UIViewController, size: CGSize) -> UIWindow {
-        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+    private func present<Content: View>(_ parent: ScienceLabTestHostingController<Content>, size: CGSize) async -> UIWindow {
+        let window = scienceLabTestWindow(frame: CGRect(origin: .zero, size: size))
         window.rootViewController = parent
         window.makeKeyAndVisible()
         parent.view.layoutIfNeeded()
+        // makeUIView runs before UIKit finishes the window's appearance.
+        // Wait for the real lifecycle callback before operating or removing it.
+        let appeared = expectation(for: NSPredicate { _, _ in parent.nativeDidAppear }, evaluatedWith: nil)
+        await fulfillment(of: [appeared], timeout: 3)
         return window
     }
 
