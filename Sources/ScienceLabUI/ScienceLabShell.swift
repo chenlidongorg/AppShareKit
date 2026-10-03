@@ -115,7 +115,7 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
                 // container lets its backdrop blur the actual data text.
                 ScienceLabGlassGroup {
                     VStack(spacing: 0) {
-                        header(focused: focused)
+                        windowAwareHeader(focused: focused)
                         if showsTitle && !focused {
                             heading(subtitleVisible: subtitleVisible)
                                 .padding(.top, 8)
@@ -187,6 +187,19 @@ public struct ScienceLabShell<Stage: View, Controls: View, Readouts: View, Knowl
             // Keep the native view in the existing SwiftUI hierarchy: no
             // shared ancestor recognizers, affine transform or extra hosting.
             stage(size)
+        }
+    }
+
+    @ViewBuilder
+    private func windowAwareHeader(focused: Bool) -> some View {
+        if #available(iOS 26.0, macCatalyst 26.0, *) {
+            // The system supplies the actual corner space occupied by window
+            // controls and rounded corners. Re-propose the available width so
+            // the trailing controls also remain inside a narrow window.
+            header(focused: focused)
+                .containerCornerOffset(.horizontal, sizeToFit: true)
+        } else {
+            header(focused: focused)
         }
     }
 
