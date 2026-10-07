@@ -6,7 +6,7 @@ import CoreGraphics
 /// Camera geometry only: a tool continues to render and measure in its original
 /// stage coordinates. No scientific dimensions or values are rescaled.
 public struct ScienceLabViewportState: Equatable {
-    public static let minimumScale: CGFloat = 1
+    public static let minimumScale: CGFloat = 0.6
     public static let maximumScale: CGFloat = 3
     public private(set) var size: CGSize
     public private(set) var scale: CGFloat
@@ -19,7 +19,8 @@ public struct ScienceLabViewportState: Equatable {
     }
 
     /// The content underneath the first centroid stays underneath the current
-    /// centroid, except when an edge clamp is necessary to avoid exposing space.
+    /// centroid, except at a boundary. At or below full size, center the whole
+    /// stage so zooming out cannot push any part of it offscreen.
     public func transformed(scaleFactor: CGFloat, from initialCentroid: CGPoint, to centroid: CGPoint) -> Self {
         guard scaleFactor.isFinite, scaleFactor > 0,
               initialCentroid.x.isFinite, initialCentroid.y.isFinite,
@@ -60,8 +61,8 @@ public struct ScienceLabViewportState: Equatable {
     }
 
     private static func clamped(_ offset: CGSize, size: CGSize, scale: CGFloat) -> CGSize {
-        let xLimit = size.width * (scale - 1) / 2
-        let yLimit = size.height * (scale - 1) / 2
+        let xLimit = size.width * max(0, scale - 1) / 2
+        let yLimit = size.height * max(0, scale - 1) / 2
         return CGSize(width: min(xLimit, max(-xLimit, offset.width.isFinite ? offset.width : 0)),
                       height: min(yLimit, max(-yLimit, offset.height.isFinite ? offset.height : 0)))
     }

@@ -12,11 +12,11 @@ final class ScienceLabViewportTests: XCTestCase {
         XCTAssertEqual(state.contentPoint(fromViewport: CGPoint(x: 400, y: 800)), CGPoint(x: 400, y: 800))
     }
 
-    func testCameraCapsAreOneAndThree() {
+    func testCameraCapsArePointSixAndThree() {
         let baseline = ScienceLabViewportState(size: portrait, scale: 2)
         XCTAssertEqual(baseline.transformed(scaleFactor: 100, from: .zero, to: .zero).scale, 3)
         let minimum = baseline.transformed(scaleFactor: 0.01, from: .zero, to: .zero)
-        XCTAssertEqual(minimum.scale, 1)
+        XCTAssertEqual(minimum.scale, 0.6)
         XCTAssertEqual(minimum.offset, .zero)
     }
 
